@@ -47,7 +47,7 @@ def show_pack(out, key):
                 z.write(f, f.name)
     st.download_button("Download complete pack",data.getvalue(),file_name=out.parent.name+"-"+out.name+".zip",mime="application/zip",key=key)
 
-tabs=st.tabs(["PRODUCT","STUDY","REVIEW","ASK","LIBRARY","HISTORY","STATUS"])
+tabs=st.tabs(["PRODUCT","STUDY","REVIEW","ASK","CURRICULUM","LIBRARY","HISTORY","STATUS"])
 with tabs[0]:
     topic=st.text_input("What do you want to learn?",placeholder="cardiac cycle",max_chars=250)
     st.caption("PDFs + PubMed + authoritative web pages → study guide, workbook, cards, quiz and scripts.")
@@ -183,6 +183,61 @@ with tabs[3]:
             except Exception as e: show_error(e)
     if st.session_state.get("answer"): st.markdown(st.session_state["answer"])
 with tabs[4]:
+    st.caption("Canonical curriculum: Semester → Subject → Week → Seminar → Topic → Subtopic → Learning Objective. Paste a weekly or seminar syllabus; topics become traceable study targets.")
+    c1,c2,c3=st.columns(3)
+    syn_subject=c1.text_input("Subject (optional)",key="curr_subject",placeholder="e.g. Endocrinology")
+    syn_semester=c2.text_input("Semester (optional)",key="curr_semester",placeholder="e.g. Semester 3")
+    syn_week=c3.number_input("Attach loose seminars to week (0 = ignore)",0,52,0,key="curr_week")
+    syllabus=st.text_area("Paste weekly syllabus",height=220,key="curr_syllabus",placeholder="Week 1: Hypothalamus & Pituitary\nSeminar: Pituitary hormones\n- Anterior pituitary hormones\n  - GH and IGF-1 axis\nLO: Explain the GH axis with feedback control")
+    if st.button("Import syllabus",type="primary") and syllabus.strip():
+        try:
+            res=mf.import_syllabus(
+                syllabus,
+                subject_title=syn_subject.strip() or None,
+                semester_title=syn_semester.strip() or None,
+                week_number=int(syn_week) or None,
+            )
+            if res["created_total"]==0:
+                st.info("Nothing new — every parsed node already exists (idempotent import).")
+            else:
+                st.success("Imported: "+", ".join(f"{v} {k}(s)" for k,v in sorted(res["created"].items())))
+        except Exception as e: show_error(e)
+    try:
+        prog=mf.curriculum_progress()
+    except Exception as e:
+        prog=None; show_error(e)
+    if prog:
+        s=prog["summary"]
+        p1,p2,p3,p4,p5=st.columns(5)
+        p1.metric("Subjects",s["subjects"])
+        p2.metric("Weeks",s["weeks"])
+        p3.metric("Topics",s["topics"])
+        p4.metric("Studied",s["topics_studied"])
+        p5.metric("Mastered (≥70)",s["topics_mastered"])
+        if s["studied_unmapped"]:
+            st.warning("Studied topics not yet mapped to the curriculum: "+", ".join(s["studied_unmapped"]))
+        if s["topics"]==0:
+            st.info("Import a syllabus above to populate your curriculum.")
+        if prog["subjects"]:
+            with st.expander("Curriculum tree & progress"):
+                st.json(mf.curriculum_tree())
+        with st.expander("Topic traceability lookup"):
+            look=st.text_input("Studied topic",key="curr_lookup",placeholder="e.g. pituitary-gland or Anterior pituitary hormones")
+            if st.button("Show curriculum position") and look.strip():
+                res=mf.topic_path(look.strip())
+                if res is None: st.warning("Not mapped yet — add it to a syllabus, then re-run lookup.")
+                else: st.success(res["position"])
+        with st.expander("Prerequisites"):
+            pa,pb,pc=st.columns([2,2,1])
+            pre_topic=pa.text_input("Topic",key="prereq_topic")
+            pre_req=pb.text_input("Requires",key="prereq_req")
+            pre_type=pc.selectbox("Type",list(mf.PREREQUISITE_TYPES),0,key="prereq_type")
+            if st.button("Add prerequisite") and pre_topic.strip() and pre_req.strip():
+                try:
+                    mf.add_prerequisite(pre_topic.strip(),pre_req.strip(),pre_type)
+                    st.success(f"Recorded: {pre_req} → {pre_topic} ({pre_type})")
+                except Exception as e: show_error(e)
+with tabs[5]:
     st.caption("Add medical PDFs you are entitled to use. Changed files are indexed on the next product run.")
     uploads=st.file_uploader("Add PDFs",type=["pdf"],accept_multiple_files=True)
     if st.button("Save selected PDFs"):
@@ -198,7 +253,7 @@ with tabs[4]:
             st.success("Saved "+target.name)
     st.code(str(mf.DOCS),language=None)
     st.caption("Scanned PDFs with no readable text are reported. OCR is not yet included.")
-with tabs[5]:
+with tabs[6]:
     states=sorted(mf.PRODUCTS.glob("*/v*/state.json"),key=lambda p:p.stat().st_mtime,reverse=True)
     if not states: st.info("Your generated packs will appear here.")
     for path in states[:30]:
@@ -207,7 +262,7 @@ with tabs[5]:
         with st.expander(f"{state.get('topic','Topic')} · {path.parent.name} · {'Draft complete' if state.get('complete') else 'In progress'}"):
             if state.get("complete"): show_pack(path.parent,"history-"+str(path))
             else: st.caption("Enter this topic in PRODUCT to resume compatible saved work.")
-with tabs[6]:
+with tabs[7]:
     try:
         s=mf.status()
         a,b,c=st.columns(3)

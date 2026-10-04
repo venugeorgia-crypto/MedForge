@@ -56,39 +56,50 @@
 - **Operations**: `init_db()`, `upsert_records()`, `get_collection()`, `migrate_database()`
 - **Chunking**: Overlapping word windows (default 300 words, 50 overlap)
 
-### 3. `medforge/ingestion.py` — Evidence Acquisition
+### 3. `medforge/curriculum.py` — Canonical Curriculum Engine (V4)
+- **Hierarchy**: SEMESTER → SUBJECT → WEEK → SEMINAR → TOPIC → SUBTOPIC →
+  LEARNING OBJECTIVE in the `curriculum_nodes` tree + `prerequisites` graph
+- **Syllabus import**: line-based parser (weeks, seminars, bullets, LOs);
+  idempotent; normalization + duplicate detection; `week_number` mode for
+  seminar-level imports
+- **Traceability**: `topic_path()` maps a studied topic (title or slug) to its
+  full curriculum chain; `curriculum_progress()` joins `learner_mastery`
+- **Schema**: `core/database/migrate_v4.py` widens the node-type CHECK
+  (row-preserving, self-healing); see `docs/CURRICULUM.md`
+
+### 4. `medforge/ingestion.py` — Evidence Acquisition
 - **PDFs**: `pypdf` extraction, SHA-256 change detection, incremental re-index
 - **PubMed**: NCBI E-utilities (esearch + efetch), XML parsing
 - **Web Research**: DDGS search → domain allowlist → hardened fetch → trafilatura extraction
 - **Security**: DNS validation, IP allowlist (global only), size limits, redirect limits
 
-### 4. `medforge/retrieval.py` — Hybrid Search
+### 5. `medforge/retrieval.py` — Hybrid Search
 - **Keyword**: SQLite FTS5 BM25
 - **Vector**: ChromaDB cosine similarity
 - **Fusion**: Reciprocal Rank Fusion (RRF) with quality weighting
 - **Filtering**: Quality thresholds, keyword-match requirement for web, distance threshold for vector
 
-### 5. `medforge/models.py` — LLM Management
+### 6. `medforge/models.py` — LLM Management
 - **Ollama lifecycle**: Health check, auto-start, model pull
 - **Model selection**: Embedding readiness → chat model test → fallback chain
 - **Resource management**: Stop unused models, disk space checks
 - **Generation**: Chat + embeddings with retries, thinking token handling
 
-### 6. `medforge/generation.py` — Content Generation
+### 7. `medforge/generation.py` — Content Generation
 - **Prompt templates**: Evidence + task → structured output
 - **Citation audit**: Label validation, HTML/JSON reports
 - **Flashcard parsing**: TSV with source label verification
 
-### 7. `medforge/export.py` — Output Formats
+### 8. `medforge/export.py` — Output Formats
 - **PDF**: ReportLab with custom fonts, headers/footers
 - **Anki**: genanki with evidence-backed cards, HTML formatting
 
-### 8. `medforge/product.py` — Pipeline Orchestration
+### 9. `medforge/product.py` — Pipeline Orchestration
 - **State machine**: Versioned directories, SHA-256 content hashing, resumable
 - **Steps**: Ingestion → Source snapshot → Generation → Export → Audit
 - **Concurrency**: File locking (`.job.lock`) for serialization
 
-### 9. `medforge/utils.py` — Shared Utilities
+### 10. `medforge/utils.py` — Shared Utilities
 - Filesystem, locking, hashing, shell, time, decorators
 
 ---

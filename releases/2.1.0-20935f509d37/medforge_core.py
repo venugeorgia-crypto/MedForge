@@ -37,6 +37,10 @@ from medforge import (  # noqa: E402
     ensure_models, ensure_ollama_running, model_names, model_exists,
     test_chat_model, stop_model, embed, chat, ollama_alive, pull_model, http_json,
     build_product, product_dir, save_state, ask, study, status,
+    HIERARCHY, normalize_title, title_key, ensure_curriculum_tables,
+    find_node, ensure_node, get_children, import_syllabus, parse_syllabus,
+    add_prerequisite, remove_prerequisite, curriculum_tree, topic_path,
+    curriculum_progress, detect_duplicates,
     mkdirs, sh, slugify, utcnow, atomic_text, job_lock, serialized, chunks, batch,
 )
 
@@ -62,6 +66,8 @@ def main() -> None:
         print("Commands: product <topic> | ask <question> | study <topic> | "
               "study-log <topic> <score> | mastery | due | "
               "review <item_id> <grade 0-5> [sm2|fsrs] | import-cards [topic] | "
+              "syllabus [file] | curriculum | path <topic> | "
+              "prereq <topic>|<prerequisite> [|strict|recommended|co-requisite] | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -126,6 +132,43 @@ def main() -> None:
             except Exception as e:
                 results.append({"topic_id": topic, "error": str(e)})
         print(json.dumps(results, indent=2))
+    elif cmd == "syllabus":
+        # syllabus [file] — weekly or seminar-level pasted syllabus → curriculum.
+        # A file path imports its text; with no argument, read the piped stdin.
+        if arg:
+            text = Path(arg).read_text(encoding="utf-8")
+        elif not sys.stdin.isatty():
+            text = sys.stdin.read()
+        else:
+            raise SystemExit("Usage: medforge_core syllabus <file> (or pipe text in)")
+        print(json.dumps(import_syllabus(text), indent=2))
+    elif cmd == "curriculum":
+        print(json.dumps({
+            "progress": curriculum_progress(),
+            "duplicates": detect_duplicates(),
+        }, indent=2))
+    elif cmd == "path":
+        if not arg:
+            raise SystemExit("Usage: medforge_core path <topic>")
+        result = topic_path(arg)
+        if result is None:
+            print(json.dumps({"topic": arg, "mapped": False,
+                              "hint": "Import a syllabus containing this topic."}, indent=2))
+        else:
+            print(json.dumps({"topic": arg, "mapped": True,
+                              "position": result["position"],
+                              "chain": result["chain"]}, indent=2))
+    elif cmd == "prereq":
+        # prereq <topic>|<prerequisite>[|strict|recommended|co-requisite]
+        # Pipe-delimited because topic titles contain spaces.
+        parts = [p.strip() for p in arg.split("|")]
+        if len(parts) == 2:
+            parts.append("strict")
+        if len(parts) != 3 or not all(parts[:2]):
+            raise SystemExit(
+                'Usage: medforge_core prereq "<topic>|<prerequisite>[|type]"'
+            )
+        print(json.dumps(add_prerequisite(parts[0], parts[1], parts[2]), indent=2))
     elif cmd == "migrate":
         with job_lock():
             print(json.dumps(migrate_database(), indent=2))

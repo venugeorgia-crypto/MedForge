@@ -231,6 +231,56 @@ medforge doctor
 
 ---
 
+### `medforge syllabus [file]` — Import a Syllabus
+
+Convert a pasted weekly (or seminar-level) syllabus into structured curriculum
+data: Semester → Subject → Week → Seminar → Topic → Subtopic → Learning
+Objective. Idempotent: rerunning the same text creates nothing new.
+
+```bash
+medforge syllabus semester3.txt     # from a file
+cat syllabus.txt | medforge syllabus  # or pipe it in
+```
+
+Accepted line forms, duplicate detection, and traceability are documented in
+[CURRICULUM.md](CURRICULUM.md).
+
+---
+
+### `medforge curriculum` — Progress & Health
+
+Per-subject/week/seminar progress joined with your mastery data, plus a
+duplicate-node report.
+
+```bash
+medforge curriculum
+```
+
+---
+
+### `medforge path <topic>` — Curriculum Traceability
+
+Resolve a studied topic (by title or slug) to its curriculum position.
+
+```bash
+medforge path "GH and IGF-1 axis"
+# "position": "Semester: Semester / Subject: Endocrinology Block / Week: ... / Topic: ..."
+```
+
+---
+
+### `medforge prereq "<topic>|<prerequisite>[|type]"` — Add a Prerequisite
+
+Pipe-delimited (topic titles contain spaces). Type is `strict` (default),
+`recommended` or `co-requisite`; the edge is idempotent.
+
+```bash
+medforge prereq "Growth plate physiology|GH axis"
+medforge prereq "IGF-1 mediation|GH axis|recommended"
+```
+
+---
+
 ### `medforge migrate` — Run V3 Migration
 
 Explicitly run the V3 database migration (normally auto-run on first use).
@@ -255,6 +305,8 @@ medforge dashboard
 - **REVIEW** — Flashcard session (question → reveal → grade), due list,
   retention/streak/leech analytics, scheduler choice, and pack scheduling
 - **ASK** — Question answering
+- **CURRICULUM** — Syllabus import, progress metrics, curriculum tree,
+  topic-traceability lookup, prerequisite form
 - **LIBRARY** — Upload PDFs
 - **HISTORY** — Browse generated packs
 - **STATUS** — System health

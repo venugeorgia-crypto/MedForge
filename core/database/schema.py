@@ -44,6 +44,45 @@ MEDICAL_PUBLICATION_TYPES = (
     "Educational",
 )
 
+# ─── V4: canonical curriculum engine (extends the V3 node-type enum) ───
+# The directive hierarchy is SEMESTER → SUBJECT → WEEK → SEMINAR → TOPIC →
+# SUBTOPIC → LEARNING OBJECTIVE. V3's enum (Year/Semester/Course/Module/…)
+# cannot express Subject/Week/Seminar nodes, so the enum is extended and the
+# curriculum_nodes CHECK constraint is rebuilt by core.database.migrate_v4
+# (data-preserving; the table shipped empty). V3_SCHEMA_DDL itself is left
+# untouched so the V3 migration record keeps its original meaning.
+CURRICULUM_NODE_TYPES = NODE_TYPES + ("Subject", "Week", "Seminar")
+
+# Rebuild template used by migrate_v4 when an old-CHECK curriculum_nodes table
+# is detected. The temporary table name is rewritten to `curriculum_nodes`
+# after the row-preserving copy; the self-referencing FK follows the rename.
+V4_CURRICULUM_NODES_DDL = """
+CREATE TABLE curriculum_nodes_v4_tmp (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT NULL REFERENCES curriculum_nodes_v4_tmp(id) ON DELETE SET NULL,
+    node_type TEXT NOT NULL CHECK(node_type IN ('Year', 'Semester', 'Course', 'Module', 'Topic', 'Subtopic', 'Learning Objective', 'Subject', 'Week', 'Seminar')),
+    code TEXT DEFAULT '',
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    year INTEGER NULL CHECK(year IS NULL OR (year >= 1 AND year <= 6)),
+    semester INTEGER NULL CHECK(semester IS NULL OR (semester >= 1 AND semester <= 12)),
+    ects_weight REAL NOT NULL DEFAULT 0.0 CHECK(ects_weight >= 0.0),
+    order_index INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
+# Index additions for the curriculum engine (idempotent). The parent is
+# COALESCE'd so the unique constraint also covers root-level nodes (SQLite
+# treats bare NULLs as distinct in unique indexes).
+V4_SCHEMA_INDEX_DDL = """
+CREATE UNIQUE INDEX IF NOT EXISTS idx_curriculum_parent_title
+    ON curriculum_nodes(COALESCE(parent_id, ''), title);
+CREATE INDEX IF NOT EXISTS idx_curriculum_type_order
+    ON curriculum_nodes(node_type, order_index);
+"""
+
 # V3 Schema DDL statements
 V3_SCHEMA_DDL = """
 -- Migration tracking table

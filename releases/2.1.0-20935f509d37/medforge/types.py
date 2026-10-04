@@ -74,6 +74,12 @@ MEDICAL_PUBLICATION_TYPES: Final[tuple[str, ...]] = (
     "Guideline", "Textbook", "Meta-Analysis", "Research", "Educational"
 )
 
+# V4 canonical curriculum node types (mirrors core.database.schema; extends
+# the V3 enum with Subject/Week/Seminar for the Phase 2 hierarchy).
+CURRICULUM_NODE_TYPES: Final[tuple[str, ...]] = NODE_TYPES + (
+    "Subject", "Week", "Seminar",
+)
+
 # ─── System Prompt ───
 SYSTEM_EVIDENCE: Final[str] = """You are MedForge, a cautious medical education assistant.
 Use ONLY the supplied evidence for factual medical claims.

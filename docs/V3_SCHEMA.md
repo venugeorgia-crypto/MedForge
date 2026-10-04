@@ -279,8 +279,19 @@ result = migrate_database()
 
 ## Enum Reference
 
-### `NODE_TYPES`
+### `NODE_TYPES` (V3)
 `('Year', 'Semester', 'Course', 'Module', 'Topic', 'Subtopic', 'Learning Objective')`
+
+### `CURRICULUM_NODE_TYPES` (V4)
+`NODE_TYPES + ('Subject', 'Week', 'Seminar')`
+
+V4 (migration `4.0.0`, `core/database/migrate_v4.py`) widens the
+`curriculum_nodes.node_type` CHECK with `Subject`, `Week` and `Seminar` so the
+canonical curriculum hierarchy (SEMESTER → SUBJECT → WEEK → SEMINAR → TOPIC →
+SUBTOPIC → LEARNING OBJECTIVE) is expressible. The rebuild is row-preserving
+and self-healing on first curriculum use; it also adds the unique
+`idx_curriculum_parent_title` index (parent COALESCEd, so root titles are
+covered) and `idx_curriculum_type_order`. See `docs/CURRICULUM.md`.
 
 ### `PREREQUISITE_TYPES`
 `('strict', 'recommended', 'co-requisite')`

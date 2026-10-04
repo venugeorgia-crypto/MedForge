@@ -29,6 +29,7 @@ from medforge.types import (
     SPACED_REPETITION_STATES,
     SPACED_REPETITION_ITEM_TYPES,
     MEDICAL_PUBLICATION_TYPES,
+    CURRICULUM_NODE_TYPES,
     SYSTEM_EVIDENCE,
 )
 from medforge.utils import (
@@ -63,6 +64,12 @@ from medforge.ingestion import (
 from medforge.product import (
     build_product, product_dir, save_state, ask, study, status,
 )
+from medforge.curriculum import (
+    HIERARCHY, normalize_title, title_key, ensure_curriculum_tables,
+    find_node, ensure_node, get_children, import_syllabus, parse_syllabus,
+    add_prerequisite, remove_prerequisite, curriculum_tree, topic_path,
+    curriculum_progress, detect_duplicates,
+)
 
 __version__ = VERSION
 
@@ -73,7 +80,7 @@ __all__ = [
     "FALLBACK_MODELS", "NCBI_EMAIL", "OFFLINE", "TRUSTED_DOMAINS",
     "NODE_TYPES", "PREREQUISITE_TYPES", "WEAKNESS_SEVERITY", "SESSION_TYPES",
     "SPACED_REPETITION_STATES", "SPACED_REPETITION_ITEM_TYPES",
-    "MEDICAL_PUBLICATION_TYPES", "SYSTEM_EVIDENCE",
+    "MEDICAL_PUBLICATION_TYPES", "CURRICULUM_NODE_TYPES", "SYSTEM_EVIDENCE",
     # utils
     "mkdirs", "sh", "slugify", "utcnow", "atomic_text", "job_lock", "serialized",
     "chunks", "batch",
@@ -101,4 +108,9 @@ __all__ = [
     "domain_quality",
     # product
     "build_product", "product_dir", "save_state", "ask", "study", "status",
+    # curriculum engine (V4)
+    "HIERARCHY", "normalize_title", "title_key", "ensure_curriculum_tables",
+    "find_node", "ensure_node", "get_children", "import_syllabus",
+    "parse_syllabus", "add_prerequisite", "remove_prerequisite",
+    "curriculum_tree", "topic_path", "curriculum_progress", "detect_duplicates",
 ]
