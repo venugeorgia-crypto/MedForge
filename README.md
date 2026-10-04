@@ -48,7 +48,7 @@ with full source citations for every claim.
 ## Quick start (from source)
 
 ```bash
-git clone https://github.com/venuchowdary/MedForge.git
+git clone https://github.com/venugeorgia-crypto/MedForge.git
 cd MedForge/releases/2.1.0-20935f509d37
 python3 -m venv .venv
 source .venv/bin/activate
