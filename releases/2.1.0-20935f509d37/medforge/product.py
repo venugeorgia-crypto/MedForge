@@ -312,6 +312,34 @@ Keep each card atomic and concise."""
     cited, total = citation_audit(generated, sources, out)
     save_state(out, state, "evidence_audit", {"cited_lines": cited, "total_lines": total})
 
+    # ─── P4 evidence graph: claims → evidence → verification ───
+    # Guarded: verification augments the pack and never blocks pack creation.
+    # Bounded for an 8 GB machine (≤12 claims, ≤2 candidates each); the pack
+    # sources are reused as candidates, so no new embedding or retrieval runs.
+    try:
+        from medforge.evidence import verify_product_claims
+
+        graph = verify_product_claims(
+            {k: v for k, v in generated.items() if not k.endswith(".csv")},
+            sources,
+            topic=topic,
+            generation_run="/".join(out.parts[-2:]),
+            model=model,
+            max_claims=12,
+            max_candidates=2,
+            outdir=out,
+        )
+        save_state(out, state, "evidence_graph", {
+            "claims": graph["claims_extracted"],
+            "verified": graph["claims_verified"],
+            "statuses": graph["statuses"],
+        })
+        summary = ", ".join(f"{k}:{v}" for k, v in sorted(graph["statuses"].items()))
+        print(f"✓ Evidence graph: {graph['claims_verified']} claims verified"
+              + (f" ({summary})" if summary else ""))
+    except Exception as e:
+        print("! Evidence graph skipped:", e)
+
     state["complete"] = True
     state["finished_at"] = utcnow()
     atomic_text(out / "state.json", json.dumps(state, indent=2))
@@ -409,7 +437,7 @@ def status() -> Dict[str, Any]:
         n = con.execute("select count(*) from chunks").fetchone()[0]
     finally:
         con.close()
-    return {
+    result = {
         "version": T.VERSION,
         "base": str(T.BASE),
         "chunks": n,
@@ -418,3 +446,13 @@ def status() -> Dict[str, Any]:
         "ollama": ollama_alive(),
         "models": model_names() if ollama_alive() else [],
     }
+    try:
+        from medforge.evidence import evidence_snapshot
+
+        snap = evidence_snapshot()
+        result["claims"] = snap["counts"]["claims"]
+        result["claims_needs_review"] = snap["needs_review"]
+        result["evidence_records"] = snap["counts"]["evidence"]
+    except Exception:
+        pass
+    return result

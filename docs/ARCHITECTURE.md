@@ -82,39 +82,61 @@
   suggestions are read-only
 - See `docs/TEXTBOOKS.md`
 
-### 5. `medforge/ingestion.py` — Evidence Acquisition
+### 5. `medforge/evidence.py` — Evidence Graph (V6)
+- **Claims**: deterministic extraction from generated text (prose, bullets,
+  table rows; headings/code/prompts/questions/instructions skipped) with
+  conservative normalization and content-addressed ids — duplicate-safe,
+  never merging medically distinct statements
+- **Evidence**: retrieved source chunks stored with exact P3 provenance
+  (document/edition/chapter/section/page/chunk + bounded excerpt); sourced
+  from the pack snapshot or bounded `hybrid_retrieve()`, never from the
+  generated text itself
+- **Verification**: model-assisted per (claim, evidence) pair inside a strict
+  JSON contract with delimited data-only prompts; malformed/absent answers and
+  missing evidence degrade to `INSUFFICIENT_EVIDENCE` (zero model calls when
+  there are no candidates); deterministic aggregation never upgrades
+  UNSUPPORTED/PARTIALLY_SUPPORTED; every attempt is appended to
+  `verification_runs`
+- **Surfaces**: `claims`/`claim-info`/`verify-pack`/`evidence-status` CLI +
+  the dashboard EVIDENCE tab; `build_product()` runs a guarded, bounded pass
+  and writes an excerpt-free `evidence-graph.json`
+- See `docs/EVIDENCE.md`
+
+### 6. `medforge/ingestion.py` — Evidence Acquisition
 - **PDFs**: `pypdf` extraction, SHA-256 change detection, incremental re-index
 - **PubMed**: NCBI E-utilities (esearch + efetch), XML parsing
 - **Web Research**: DDGS search → domain allowlist → hardened fetch → trafilatura extraction
 - **Security**: DNS validation, IP allowlist (global only), size limits, redirect limits
 
-### 6. `medforge/retrieval.py` — Hybrid Search
+### 7. `medforge/retrieval.py` — Hybrid Search
 - **Keyword**: SQLite FTS5 BM25
 - **Vector**: ChromaDB cosine similarity
 - **Fusion**: Reciprocal Rank Fusion (RRF) with quality weighting
 - **Filtering**: Quality thresholds, keyword-match requirement for web, distance threshold for vector
 
-### 7. `medforge/models.py` — LLM Management
+### 8. `medforge/models.py` — LLM Management
 - **Ollama lifecycle**: Health check, auto-start, model pull
 - **Model selection**: Embedding readiness → chat model test → fallback chain
 - **Resource management**: Stop unused models, disk space checks
 - **Generation**: Chat + embeddings with retries, thinking token handling
 
-### 8. `medforge/generation.py` — Content Generation
+### 9. `medforge/generation.py` — Content Generation
 - **Prompt templates**: Evidence + task → structured output
-- **Citation audit**: Label validation, HTML/JSON reports
+- **Citation audit**: Label validation, HTML/JSON reports (compatibility floor —
+  the V6 evidence graph is the verification mechanism; see `docs/EVIDENCE.md`)
 - **Flashcard parsing**: TSV with source label verification
 
-### 9. `medforge/export.py` — Output Formats
+### 10. `medforge/export.py` — Output Formats
 - **PDF**: ReportLab with custom fonts, headers/footers
 - **Anki**: genanki with evidence-backed cards, HTML formatting
 
-### 10. `medforge/product.py` — Pipeline Orchestration
+### 11. `medforge/product.py` — Pipeline Orchestration
 - **State machine**: Versioned directories, SHA-256 content hashing, resumable
-- **Steps**: Ingestion → Source snapshot → Generation → Export → Audit
+- **Steps**: Ingestion → Source snapshot → Generation → Export → Audit →
+  Evidence graph (guarded, bounded, never blocks the pack)
 - **Concurrency**: File locking (`.job.lock`) for serialization
 
-### 11. `medforge/utils.py` — Shared Utilities
+### 12. `medforge/utils.py` — Shared Utilities
 - Filesystem, locking, hashing, shell, time, decorators
 
 ---
@@ -162,9 +184,21 @@ USER TOPIC
     │
     ▼
 ┌─────────────────────────────────────┐
-│  CITATION AUDIT                     │
+│  CITATION AUDIT (compatibility)     │
 │  Scan all generated text for        │
 │  [S#] labels → evidence-report.*    │
+└─────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────┐
+│  EVIDENCE GRAPH (V6, bounded)       │
+│  extract claims → store evidence    │
+│  (exact P3 provenance) → model-     │
+│  assisted verification → aggregate  │
+│  status + append-only history       │
+│  Saved: evidence-graph.json         │
+│  (excerpt-free); excerpts stay in   │
+│  the private SQLite database        │
 └─────────────────────────────────────┘
 ```
 

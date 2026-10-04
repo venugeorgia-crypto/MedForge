@@ -338,6 +338,57 @@ medforge textbook-evidence "GH axis"
 
 ---
 
+### `medforge claims [STATUS]` — List Extracted Claims
+
+Bounded claim listing (newest first, up to 50) with optional verification-status
+filter: `PENDING`, `SUPPORTED`, `PARTIALLY_SUPPORTED`, `UNSUPPORTED`,
+`CONTRADICTED`, `INSUFFICIENT_EVIDENCE`, `NOT_FACTUAL`, `HUMAN_REVIEWED`.
+
+```bash
+medforge claims
+medforge claims UNSUPPORTED
+```
+
+---
+
+### `medforge claim-info <claim_id>` — Claim → Evidence Trace
+
+Full inspection: the claim, its verification status and confidence, every
+evidence relationship with bounded excerpt, the provenance chain
+(source → edition → chapter → section → page), and the append-only
+verification history.
+
+```bash
+medforge claim-info 110c2536499afb1a01b13052
+```
+
+---
+
+### `medforge verify-pack [pack_dir]` — Verify an Existing Pack
+
+Extracts claims from a generated pack's markdown, reuses its saved
+`source-map.json` sources as candidate evidence (no new embedding), verifies
+with the local model and writes an excerpt-free `evidence-graph.json`. Bounded
+for an 8 GB M1: ≤12 claims × ≤2 candidates, one model call per pair; with no
+argument it picks the newest pack under `products/`.
+
+```bash
+medforge verify-pack "products/prolactinoma/v001"
+```
+
+---
+
+### `medforge evidence-status` — Evidence Graph Counts
+
+Claims, evidence records, relationships and verification runs with a status
+breakdown and the `needs_review` count.
+
+```bash
+medforge evidence-status
+```
+
+---
+
 ### `medforge migrate` — Run V3 Migration
 
 Explicitly run the V3 database migration (normally auto-run on first use).

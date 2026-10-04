@@ -205,6 +205,117 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ctl_unique
     ON curriculum_text_links(curriculum_node_id, edition_id, COALESCE(node_id, ''));
 """
 
+# ─── V6: evidence graph (claims → evidence → verification history) ───
+# Generated text stops being "lines with [S#] labels" and becomes explicit
+# claim records with inspectable evidence relationships and an append-only
+# verification history. Purely additive tables.
+CLAIM_TYPES = (
+    "fact", "definition", "mechanism", "association", "causation",
+    "clinical", "epidemiology", "question", "instruction", "non_factual",
+)
+CLAIM_VERIFICATION_STATUS = (
+    "PENDING", "SUPPORTED", "PARTIALLY_SUPPORTED", "UNSUPPORTED",
+    "CONTRADICTED", "INSUFFICIENT_EVIDENCE", "NOT_FACTUAL", "HUMAN_REVIEWED",
+)
+CLAIM_REVIEW_STATUS = ("auto", "needs_review", "human_reviewed", "rejected")
+EVIDENCE_TYPES = ("textbook", "course_pdf", "pubmed", "web", "guideline", "other")
+CLAIM_EVIDENCE_RELATIONSHIPS = (
+    "supports", "partially_supports", "contradicts", "insufficient", "related",
+)
+VERIFICATION_RESULTS = (
+    "SUPPORTED", "PARTIALLY_SUPPORTED", "UNSUPPORTED", "CONTRADICTED",
+    "INSUFFICIENT_EVIDENCE",
+)
+
+_CLAIM_TYPE_SQL = ", ".join(f"'{v}'" for v in CLAIM_TYPES)
+_CLAIM_STATUS_SQL = ", ".join(f"'{v}'" for v in CLAIM_VERIFICATION_STATUS)
+_CLAIM_REVIEW_SQL = ", ".join(f"'{v}'" for v in CLAIM_REVIEW_STATUS)
+_EVIDENCE_TYPE_SQL = ", ".join(f"'{v}'" for v in EVIDENCE_TYPES)
+_RELATIONSHIP_SQL = ", ".join(f"'{v}'" for v in CLAIM_EVIDENCE_RELATIONSHIPS)
+_VERIFICATION_RESULT_SQL = ", ".join(f"'{v}'" for v in VERIFICATION_RESULTS)
+
+V6_SCHEMA_DDL = f"""
+-- 1. Claims (content-addressed: same normalized text = one claim record)
+CREATE TABLE IF NOT EXISTS claims (
+    claim_id TEXT PRIMARY KEY,
+    claim_text TEXT NOT NULL,
+    normalized_text TEXT NOT NULL UNIQUE,
+    claim_type TEXT NOT NULL DEFAULT 'fact' CHECK(claim_type IN ({_CLAIM_TYPE_SQL})),
+    topic TEXT DEFAULT '',
+    curriculum_node_id TEXT NULL REFERENCES curriculum_nodes(id) ON DELETE SET NULL,
+    source_labels TEXT DEFAULT '',
+    source_file TEXT DEFAULT '',
+    generation_run TEXT DEFAULT '',
+    verification_status TEXT NOT NULL DEFAULT 'PENDING' CHECK(verification_status IN ({_CLAIM_STATUS_SQL})),
+    verification_confidence REAL NULL CHECK(verification_confidence IS NULL OR (verification_confidence >= 0.0 AND verification_confidence <= 1.0)),
+    review_status TEXT NOT NULL DEFAULT 'auto' CHECK(review_status IN ({_CLAIM_REVIEW_SQL})),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_claims_status ON claims(verification_status);
+CREATE INDEX IF NOT EXISTS idx_claims_topic ON claims(topic);
+CREATE INDEX IF NOT EXISTS idx_claims_curriculum ON claims(curriculum_node_id);
+
+-- 2. Evidence records (structured provenance; no invented locators)
+CREATE TABLE IF NOT EXISTS evidence (
+    evidence_id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL DEFAULT '',
+    chunk_id TEXT DEFAULT '',
+    evidence_type TEXT NOT NULL DEFAULT 'other' CHECK(evidence_type IN ({_EVIDENCE_TYPE_SQL})),
+    document_id TEXT NULL,
+    edition_id TEXT NULL REFERENCES textbook_editions(id) ON DELETE SET NULL,
+    textbook_node_id TEXT NULL REFERENCES textbook_nodes(id) ON DELETE SET NULL,
+    chapter_title TEXT DEFAULT '',
+    section_title TEXT DEFAULT '',
+    page_number INTEGER NULL CHECK(page_number IS NULL OR page_number >= 1),
+    locator TEXT DEFAULT '',
+    url TEXT DEFAULT '',
+    quality REAL NOT NULL DEFAULT 0.0 CHECK(quality >= 0.0 AND quality <= 1.0),
+    excerpt TEXT NOT NULL,
+    excerpt_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_chunk ON evidence(chunk_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_edition ON evidence(edition_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_type ON evidence(evidence_type);
+
+-- 3. Claim ↔ evidence relationships (one deduplicated edge per pair)
+CREATE TABLE IF NOT EXISTS claim_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    claim_id TEXT NOT NULL REFERENCES claims(claim_id) ON DELETE CASCADE,
+    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id) ON DELETE CASCADE,
+    relationship TEXT NOT NULL DEFAULT 'related' CHECK(relationship IN ({_RELATIONSHIP_SQL})),
+    support_confidence REAL NULL CHECK(support_confidence IS NULL OR (support_confidence >= 0.0 AND support_confidence <= 1.0)),
+    verification_method TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(claim_id, evidence_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_claim_evidence_claim ON claim_evidence(claim_id);
+CREATE INDEX IF NOT EXISTS idx_claim_evidence_evidence ON claim_evidence(evidence_id);
+
+-- 4. Verification history (append-only; never overwritten)
+CREATE TABLE IF NOT EXISTS verification_runs (
+    verification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    claim_id TEXT NOT NULL REFERENCES claims(claim_id) ON DELETE CASCADE,
+    evidence_id TEXT NULL REFERENCES evidence(evidence_id) ON DELETE SET NULL,
+    method TEXT NOT NULL DEFAULT '',
+    result TEXT NOT NULL CHECK(result IN ({_VERIFICATION_RESULT_SQL})),
+    confidence REAL NULL CHECK(confidence IS NULL OR (confidence >= 0.0 AND confidence <= 1.0)),
+    notes TEXT DEFAULT '',
+    verifier TEXT DEFAULT '',
+    verifier_version TEXT DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_verification_claim ON verification_runs(claim_id);
+CREATE INDEX IF NOT EXISTS idx_verification_time ON verification_runs(created_at);
+"""
+
 # V3 Schema DDL statements
 V3_SCHEMA_DDL = """
 -- Migration tracking table

@@ -108,6 +108,36 @@ SOURCE_PRIORITY: Final[dict[str, float]] = {
     "web": 0.84,
 }
 
+# ─── V6 evidence-graph enums (mirror core.database.schema) ───
+CLAIM_TYPES: Final[tuple[str, ...]] = (
+    "fact", "definition", "mechanism", "association", "causation",
+    "clinical", "epidemiology", "question", "instruction", "non_factual",
+)
+CLAIM_VERIFICATION_STATUS: Final[tuple[str, ...]] = (
+    "PENDING", "SUPPORTED", "PARTIALLY_SUPPORTED", "UNSUPPORTED",
+    "CONTRADICTED", "INSUFFICIENT_EVIDENCE", "NOT_FACTUAL", "HUMAN_REVIEWED",
+)
+CLAIM_REVIEW_STATUS: Final[tuple[str, ...]] = (
+    "auto", "needs_review", "human_reviewed", "rejected",
+)
+EVIDENCE_TYPES: Final[tuple[str, ...]] = (
+    "textbook", "course_pdf", "pubmed", "web", "guideline", "other",
+)
+CLAIM_EVIDENCE_RELATIONSHIPS: Final[tuple[str, ...]] = (
+    "supports", "partially_supports", "contradicts", "insufficient", "related",
+)
+VERIFICATION_RESULTS: Final[tuple[str, ...]] = (
+    "SUPPORTED", "PARTIALLY_SUPPORTED", "UNSUPPORTED", "CONTRADICTED",
+    "INSUFFICIENT_EVIDENCE",
+)
+
+# Bounded-work budget for P4 verification on an 8 GB M1 (no whole-textbook
+# loading; one model call per (claim, evidence) pair).
+EVIDENCE_MAX_EXCERPT_CHARS: Final[int] = 900
+EVIDENCE_MAX_CANDIDATES_PER_CLAIM: Final[int] = 3
+EVIDENCE_MAX_CLAIMS_PER_RUN: Final[int] = 25
+EVIDENCE_VERIFIER_VERSION: Final[str] = "p4-verifier-v1"
+
 # ─── System Prompt ───
 SYSTEM_EVIDENCE: Final[str] = """You are MedForge, a cautious medical education assistant.
 Use ONLY the supplied evidence for factual medical claims.

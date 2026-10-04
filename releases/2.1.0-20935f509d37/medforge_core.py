@@ -46,6 +46,9 @@ from medforge import (  # noqa: E402
     unlink_curriculum_text, textbook_evidence_for_topic,
     suggest_curriculum_links, registered_source_paths,
     SOURCE_PRIORITY, CURRICULUM_TEXT_LINK_TYPES,
+    ensure_evidence_tables, extract_claims, store_claims, verify_claim,
+    verify_product_claims, claims_list, claim_info, evidence_snapshot,
+    CLAIM_VERIFICATION_STATUS,
     mkdirs, sh, slugify, utcnow, atomic_text, job_lock, serialized, chunks, batch,
 )
 
@@ -77,6 +80,8 @@ def main() -> None:
               "textbook-info <edition_id> | "
               "textbook-link <topic>|<edition_id>[|<node_id>][|primary|supporting|supplementary] | "
               "textbook-evidence <topic> | "
+              "claims [STATUS] | claim-info <claim_id> | verify-pack [pack_dir] | "
+              "evidence-status | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -220,6 +225,55 @@ def main() -> None:
         if not arg:
             raise SystemExit("Usage: medforge_core textbook-evidence <topic>")
         print(json.dumps(textbook_evidence_for_topic(arg.strip()), indent=2))
+    elif cmd == "claims":
+        # claims [STATUS] — bounded listing of extracted claims.
+        status = arg.strip().upper() or None
+        if status and status not in CLAIM_VERIFICATION_STATUS:
+            raise SystemExit(
+                "STATUS must be one of: " + ", ".join(CLAIM_VERIFICATION_STATUS)
+            )
+        print(json.dumps(claims_list(status=status, limit=50), indent=2))
+    elif cmd == "claim-info":
+        if not arg:
+            raise SystemExit("Usage: medforge_core claim-info <claim_id>")
+        info = claim_info(arg.strip())
+        if info is None:
+            raise SystemExit(f"Unknown claim_id: {arg.strip()}")
+        print(json.dumps(info, indent=2))
+    elif cmd == "verify-pack":
+        # verify-pack [pack_dir] — extract & verify claims from an existing pack.
+        # Reuses the pack's saved sources; bounded (≤12 claims, ≤2 candidates)
+        # so an 8 GB M1 never loads a whole textbook for verification.
+        pack = Path(arg).expanduser().resolve() if arg else None
+        if pack is None:
+            candidates = sorted(
+                PRODUCTS.glob("*/v*/"), key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            pack = next(
+                (p for p in candidates if (p / "source-map.json").is_file()), None
+            )
+        if pack is None or not (pack / "source-map.json").is_file():
+            raise SystemExit("No product pack with source-map.json found under products/.")
+        sources = json.loads((pack / "source-map.json").read_text(encoding="utf-8"))
+        texts = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in sorted(pack.glob("*.md"))
+        }
+        if not texts:
+            raise SystemExit(f"No generated markdown found in {pack}.")
+        model = ensure_models()
+        result = verify_product_claims(
+            texts, sources, topic=pack.parent.name,
+            generation_run="/".join(pack.parts[-2:]), model=model,
+            max_claims=12, max_candidates=2, outdir=pack,
+        )
+        print(json.dumps({k: v for k, v in result.items()
+                          if k not in ("claims", "label_map")}, indent=2))
+        for claim in result["claims"][:10]:
+            print(json.dumps(claim, indent=2))
+    elif cmd == "evidence-status":
+        print(json.dumps(evidence_snapshot(), indent=2))
     elif cmd == "migrate":
         with job_lock():
             print(json.dumps(migrate_database(), indent=2))

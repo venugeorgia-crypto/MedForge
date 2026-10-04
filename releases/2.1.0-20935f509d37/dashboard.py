@@ -47,7 +47,7 @@ def show_pack(out, key):
                 z.write(f, f.name)
     st.download_button("Download complete pack",data.getvalue(),file_name=out.parent.name+"-"+out.name+".zip",mime="application/zip",key=key)
 
-tabs=st.tabs(["PRODUCT","STUDY","REVIEW","ASK","CURRICULUM","TEXTBOOKS","LIBRARY","HISTORY","STATUS"])
+tabs=st.tabs(["PRODUCT","STUDY","REVIEW","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","LIBRARY","HISTORY","STATUS"])
 with tabs[0]:
     topic=st.text_input("What do you want to learn?",placeholder="cardiac cycle",max_chars=250)
     st.caption("PDFs + PubMed + authoritative web pages → study guide, workbook, cards, quiz and scripts.")
@@ -293,6 +293,39 @@ with tabs[5]:
                             for pv in link["previews"]: st.caption(pv["locator"]+" — "+pv["text"][:180])
                 except Exception as e: show_error(e)
 with tabs[6]:
+    st.caption("Claim → verification status → evidence → source provenance. Excerpts stay in the local database (private, not redistributed).")
+    try:
+        snap=mf.evidence_snapshot()
+        a,b,c=st.columns(3)
+        a.metric("Claims",snap["counts"]["claims"])
+        b.metric("Evidence records",snap["counts"]["evidence"])
+        c.metric("Needs review",snap["needs_review"])
+        if snap["by_status"]:
+            st.caption("Statuses: "+" · ".join(f"{k}: {v}" for k,v in sorted(snap["by_status"].items())))
+        statuses=["ALL"]+list(mf.CLAIM_VERIFICATION_STATUS)
+        chosen=st.selectbox("Filter by verification status",statuses)
+        listing=mf.claims_list(status=None if chosen=="ALL" else chosen,limit=50)
+        st.caption(f"{listing['total']} claim(s)" + ("" if chosen=="ALL" else f" with status {chosen}")+" · newest first, up to 50 shown")
+        for claim in listing["claims"]:
+            head=claim["claim_text"][:90]+("…" if len(claim["claim_text"])>90 else "")
+            with st.expander(f"{head} · {claim['verification_status']}"):
+                st.write(claim["claim_text"])
+                conf=f" · confidence {claim['verification_confidence']:.2f}" if claim["verification_confidence"] is not None else ""
+                st.caption(f"Type: {claim['claim_type']} · Review: {claim['review_status']} · Topic: {claim['topic'] or '—'} · Labels: {claim['source_labels'] or '—'}{conf}")
+                info=mf.claim_info(claim["claim_id"])
+                for trace in (info or {}).get("provenance",[]):
+                    st.divider()
+                    st.markdown(f"**{trace['relationship']}** · evidence `{trace['evidence_id']}`")
+                    src=" · ".join(x for x in [trace["document"],trace["edition"],trace["chapter"],trace["section"],(f"p. {trace['page']}" if trace["page"] else trace["locator"])] if x)
+                    st.caption("Source: "+(src or trace["url"] or "no structured locator"))
+                    st.caption("Excerpt (private): "+trace["excerpt"][:400])
+                runs=(info or {}).get("runs",[])
+                if runs:
+                    with st.expander("Verification history"):
+                        for run in runs[:15]:
+                            st.caption(f"{run['created_at']} · {run['result']} · {run['method']} · {run['notes'][:140]}")
+    except Exception as e: show_error(e)
+with tabs[7]:
     st.caption("Add medical PDFs you are entitled to use. Changed files are indexed on the next product run.")
     uploads=st.file_uploader("Add PDFs",type=["pdf"],accept_multiple_files=True)
     if st.button("Save selected PDFs"):
@@ -308,7 +341,7 @@ with tabs[6]:
             st.success("Saved "+target.name)
     st.code(str(mf.DOCS),language=None)
     st.caption("Scanned PDFs with no readable text are reported. OCR is not yet included.")
-with tabs[7]:
+with tabs[8]:
     states=sorted(mf.PRODUCTS.glob("*/v*/state.json"),key=lambda p:p.stat().st_mtime,reverse=True)
     if not states: st.info("Your generated packs will appear here.")
     for path in states[:30]:
@@ -317,7 +350,7 @@ with tabs[7]:
         with st.expander(f"{state.get('topic','Topic')} · {path.parent.name} · {'Draft complete' if state.get('complete') else 'In progress'}"):
             if state.get("complete"): show_pack(path.parent,"history-"+str(path))
             else: st.caption("Enter this topic in PRODUCT to resume compatible saved work.")
-with tabs[8]:
+with tabs[9]:
     try:
         s=mf.status()
         a,b,c=st.columns(3)

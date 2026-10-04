@@ -319,6 +319,34 @@ Defined in `core/database/schema.py` (`V5_SCHEMA_DDL`); applied by
 `core/database/migrate_v5.py::ensure_textbook_v5()` (idempotent, self-healing,
 optional verified backup at `backups/medforge_pre_v5_backup.db`).
 
+### V6 evidence-graph enums
+`CLAIM_TYPES` = `('fact', 'definition', 'mechanism', 'association', 'causation',
+'clinical', 'epidemiology', 'question', 'instruction', 'non_factual')` ·
+`CLAIM_VERIFICATION_STATUS` = `('PENDING', 'SUPPORTED', 'PARTIALLY_SUPPORTED',
+'UNSUPPORTED', 'CONTRADICTED', 'INSUFFICIENT_EVIDENCE', 'NOT_FACTUAL',
+'HUMAN_REVIEWED')` · `CLAIM_REVIEW_STATUS` = `('auto', 'needs_review',
+'human_reviewed', 'rejected')` · `EVIDENCE_TYPES` = `('textbook', 'course_pdf',
+'pubmed', 'web', 'guideline', 'other')` · `CLAIM_EVIDENCE_RELATIONSHIPS` =
+`('supports', 'partially_supports', 'contradicts', 'insufficient', 'related')` ·
+`VERIFICATION_RESULTS` = `('SUPPORTED', 'PARTIALLY_SUPPORTED', 'UNSUPPORTED',
+'CONTRADICTED', 'INSUFFICIENT_EVIDENCE')`.
+
+## V6 Evidence Graph Tables (migration `6.0.0`)
+
+| Table | Purpose | Key fields |
+|---|---|---|
+| `claims` | First-class extracted claims (content-addressed) | claim_id (sha1(normalized)[:24] PK), claim_text, normalized_text (UNIQUE), claim_type, topic, curriculum_node_id FK, source_labels, source_file, generation_run, verification_status, verification_confidence (0–1), review_status, created_at, updated_at |
+| `evidence` | Retrieved source chunks with exact provenance | evidence_id (sha1(chunk\|excerpt_hash)[:24] PK), source_id, chunk_id, evidence_type, document_id, edition_id FK, textbook_node_id FK, chapter_title, section_title, page_number (≥1 or NULL), locator, url, quality (0–1), excerpt, excerpt_hash |
+| `claim_evidence` | One deduplicated edge per (claim, evidence) | claim_id FK CASCADE, evidence_id FK CASCADE, relationship, support_confidence, verification_method, notes; **UNIQUE(claim_id, evidence_id)** |
+| `verification_runs` | Append-only verification history | verification_id AUTOINCREMENT, claim_id FK CASCADE, evidence_id FK SET NULL, method, result CHECK, confidence, notes, verifier, verifier_version, created_at |
+
+Defined in `core/database/schema.py` (`V6_SCHEMA_DDL`); applied by
+`core/database/migrate_v6.py::ensure_evidence_v6()` (idempotent, self-healing,
+runs V5 → V4 first so foreign keys always resolve, optional verified backup at
+`backups/medforge_pre_v6_backup.db`). Rollback: drop the four new tables — no
+existing table is altered. Evidence excerpts are internal verification data and
+are never written into distributable artifacts. See `docs/EVIDENCE.md`.
+
 ### `PREREQUISITE_TYPES`
 `('strict', 'recommended', 'co-requisite')`
 

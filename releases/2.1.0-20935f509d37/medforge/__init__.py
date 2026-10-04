@@ -38,6 +38,12 @@ from medforge.types import (
     CURRICULUM_TEXT_LINK_TYPES,
     SOURCE_PRIORITY,
     SYSTEM_EVIDENCE,
+    CLAIM_TYPES,
+    CLAIM_VERIFICATION_STATUS,
+    CLAIM_REVIEW_STATUS,
+    EVIDENCE_TYPES,
+    CLAIM_EVIDENCE_RELATIONSHIPS,
+    VERIFICATION_RESULTS,
 )
 from medforge.utils import (
     mkdirs, sh, slugify, utcnow, atomic_text, job_lock, serialized,
@@ -82,6 +88,13 @@ from medforge.textbook import (
     ingest_textbook, list_textbooks, book_structure, link_curriculum_text,
     unlink_curriculum_text, textbook_evidence_for_topic,
     suggest_curriculum_links, registered_source_paths,
+)
+from medforge.evidence import (
+    ensure_evidence_tables, normalize_claim_text, claim_id_for, classify_claim,
+    extract_claims, store_claims, store_evidence, evidence_id_for_source,
+    pack_label_map, verify_claim, verify_product_claims, claims_list, claim_info,
+    evidence_snapshot, aggregate_verdicts, parse_verifier_response,
+    curriculum_node_id_for_topic, VERIFIER_SYSTEM, FACTUAL_CLAIM_TYPES,
 )
 
 __version__ = VERSION
@@ -134,4 +147,13 @@ __all__ = [
     "ingest_textbook", "list_textbooks", "book_structure", "link_curriculum_text",
     "unlink_curriculum_text", "textbook_evidence_for_topic",
     "suggest_curriculum_links", "registered_source_paths",
+    # evidence graph (V6)
+    "ensure_evidence_tables", "normalize_claim_text", "claim_id_for",
+    "classify_claim", "extract_claims", "store_claims", "store_evidence",
+    "evidence_id_for_source", "pack_label_map", "verify_claim",
+    "verify_product_claims", "claims_list", "claim_info", "evidence_snapshot",
+    "aggregate_verdicts", "parse_verifier_response",
+    "curriculum_node_id_for_topic", "VERIFIER_SYSTEM", "FACTUAL_CLAIM_TYPES",
+    "CLAIM_TYPES", "CLAIM_VERIFICATION_STATUS", "CLAIM_REVIEW_STATUS",
+    "EVIDENCE_TYPES", "CLAIM_EVIDENCE_RELATIONSHIPS", "VERIFICATION_RESULTS",
 ]
