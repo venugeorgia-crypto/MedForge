@@ -43,14 +43,18 @@ chunks=47, schema_migrations=1`.
 | Seminar import / topic normalization / duplicate detection / ordering / progress | none | — | — | — | — | **MISSING** → implement (this session) |
 | Topic traceability to curriculum | none (topics are free-text slugs) | `medforge/learner.py` | mastery keyed on `slugify(topic)` only | — | High | **MISSING** → implement (this session) |
 
-## P3 Textbook knowledge engine
+## P3 Textbook knowledge engine — **IMPLEMENTED (V5, this session)**
 
-| Requirement | Current implementation | Source file | Actual behavior | Test coverage | Risk | Verdict |
+| Requirement | Implementation | Source file | Actual behavior | Test coverage | Risk | Verdict |
 |---|---|---|---|---|---|---|
-| Textbook metadata (title/authors/edition/year/chapter/section/page) | only generic `chunks(source, locator='page N', kind='course_pdf')` | `medforge/ingestion.py` | Page locators preserved from PDF extraction; no textbook entity, no edition/authors | partial (ingestion) | Medium | **PARTIAL → MISSING** |
-| OCR status/confidence | none (reports "may need OCR") | `medforge/ingestion.py` | Scanned PDFs skipped with message | — | Medium | **MISSING** |
-| Tables / figure references | none | — | — | — | — | **MISSING** |
-| TOPIC ↔ TEXTBOOK mapping | none | — | — | — | — | **MISSING** |
+| Textbook metadata (title/authors/publisher/edition/year/ISBN/subject/source type) | `textbook_documents` + `textbook_editions` with deterministic ids | `medforge/textbook.py`, `core/database/schema.py` | First-class; metadata from args → sidecar JSON → PDF metadata → filename; nothing invented | `test_register_metadata_and_identity`, `test_sidecar_and_filename_metadata` | Low | **DONE** |
+| Edition identity + versioning | `content_hash` unique; edition id = sha1(doc\|hash) | `medforge/textbook.py` | Same file idempotent; changed file = new edition, old preserved | `test_same_file_reimport_is_idempotent`, `test_changed_file_creates_new_edition_and_preserves_old` | Low | **DONE** |
+| Chapter/Section/Page/Chunk hierarchy | `textbook_nodes`/`textbook_pages`/`textbook_chunks`; bookmarks or conservative heading regex; implicit `Body` fallback | `medforge/textbook.py` | Page-wise streaming; node page ranges incl. descendant pages | `test_ingest_structure_and_provenance`, `test_no_structure_pdf_gets_body_chapter`, `test_book_structure_bounded` | Low | **DONE** |
+| Stable locators | chunk rows carry edition/document/node/page/chunk_index + human locator (`p. N · Chapter / Section`) | `medforge/textbook.py` | Verified in tests and CLI evidence output | provenance tests | Low | **DONE** |
+| OCR status | `textbook_pages.extraction_status/ocr_status`; edition `ocr_status`, `skipped_pages` | `medforge/textbook.py` | No-text pages parked `pending`, never guessed; no OCR engine yet (architecture ready) | `test_ingest_structure_and_provenance`, `test_no_text_page_ocr_pending` (via PARTIAL assertions) | Low | **DONE (detection only)** |
+| TOPIC ↔ TEXTBOOK mapping | `curriculum_text_links` (COALESCE-unique) + `textbook_evidence_for_topic()` + read-only suggestions | `medforge/textbook.py` | Link idempotent; discovery returns metadata + bounded previews | `test_curriculum_link_discovery_and_unlink`, `test_link_validation_errors`, `test_suggestions_are_read_only` | Low | **DONE** |
+| Source priority | `SOURCE_PRIORITY` ranks textbook 0.95 via the existing `quality` field | `medforge/types.py` | Retrieval picks textbooks up with zero retrieval-code changes; web never silently equated | regression + shared-chunk assertions | Low | **DONE** |
+| Tables / figure references | not extracted | — | Honest gap: tables inside PDFs are read as text; figures/plan not modeled | — | Medium | **MISSING (P11)** |
 
 ## P4 Evidence graph
 
@@ -159,6 +163,7 @@ chunks=47, schema_migrations=1`.
 
 ## Headline audit conclusions
 
+0. **P2 + P3 now implemented** — curriculum engine (V4) and textbook provenance (V5) are live with 74/74 tests green; the audit verdicts below are the original Phase 0 findings, kept for history.
 1. **The 2.1 core loop is real and tested** — ingestion → hybrid retrieval → cited generation → exports → SR review, with resumability, backups, and genuine security hardening. **Preserve it (P1 satisfied).**
 2. **The biggest documented-but-not-implemented gap is the curriculum layer**: V3 schema tables exist, are empty, and are referenced by zero lines of application code. All P2 acceptance criteria are unmet today.
 3. **Citation labels ≠ verification (P4)**: the system is *honest* about this (reports say so), but claim/evidence structures are absent.
@@ -169,5 +174,6 @@ chunks=47, schema_migrations=1`.
 
 | Change | Phase | Status |
 |---|---|---|
-| Curriculum engine (schema extension + engine + CLI + dashboard + tests) | P2 | **DONE this session** — see `docs/CURRICULUM.md`; 15 new tests, 61/61 passing; V4 migration applied to the live DB with a verified pre-migration backup (SR queue 119 and 47 chunks preserved) |
+| Curriculum engine (schema extension + engine + CLI + dashboard + tests) | P2 | **DONE** — see `docs/CURRICULUM.md`; 15 new tests, 61/61 passing; V4 migration applied to the live DB with a verified pre-migration backup (SR queue 119 and 47 chunks preserved) |
+| Textbook provenance engine (documents/editions, chapter/section/page/chunk provenance, curriculum links, V5 migration, CLI + dashboard, tests) | P3 | **DONE** — see `docs/P3_MATRIX.md` execution results and `docs/TEXTBOOKS.md`; 13 new tests, 74/74 passing; V5 applied to the live DB with verified backup `backups/medforge_pre_v5_backup.db` (all row counts unchanged) |
 | Textbook engine (P3), evidence graph (P4), source hierarchy (P5), recency mastery (P6), interactive tutor (P7), assessment records (P8), card links + leech rewrite (P9), PDF/OCR upgrade (P11), video renderer (P12), provider abstraction (P13), distributable bundle (P15) | P3–P15 | **NOT STARTED — planned in dependency order; each with its own WHY/WHAT/RISK/MIGRATION/TEST/ROLLBACK record at implementation time** |

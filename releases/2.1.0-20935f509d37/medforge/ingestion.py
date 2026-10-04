@@ -23,6 +23,7 @@ import trafilatura
 import medforge.types as T
 from medforge.utils import utcnow, atomic_text, chunks, batch
 from medforge.storage import upsert_records, get_collection
+from medforge.textbook import registered_source_paths
 
 __all__ = [
     "domain_quality", "ingest_pdfs", "pubmed_import", "web_research",
@@ -62,6 +63,18 @@ def ingest_pdfs() -> int:
     from pypdf import PdfReader
 
     files = sorted(p for p in T.DOCS.rglob("*") if p.suffix.lower() == ".pdf" and p.is_file())
+    if not files:
+        return 0
+    # PDFs already ingested as registered textbooks (structural provenance,
+    # chunk_count > 0) are skipped here so their content is not indexed twice
+    # under two different id schemes. registered_source_paths() is defensive:
+    # it returns an empty set when the V5 tables do not exist yet.
+    try:
+        registered = registered_source_paths()
+        if registered:
+            files = [p for p in files if str(p.resolve()) not in registered]
+    except Exception:
+        pass
     if not files:
         return 0
     cache_path = T.DBDIR / "pdf-index.json"

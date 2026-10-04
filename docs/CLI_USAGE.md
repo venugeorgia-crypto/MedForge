@@ -281,6 +281,63 @@ medforge prereq "IGF-1 mediation|GH axis|recommended"
 
 ---
 
+### `medforge textbooks` — List Registered Textbooks
+
+Documents with their editions, chapter counts and link counts.
+
+```bash
+medforge textbooks
+```
+
+---
+
+### `medforge textbook-add <pdf>[|fields]` — Register & Ingest a Textbook
+
+Pipe-delimited optional fields: `title|edition|authors|publisher|year|isbn|subject`,
+plus `embed=0` to skip embeddings (SQLite + FTS only, no Ollama call).
+Idempotent by file content hash.
+
+```bash
+medforge textbook-add "Guyton.pdf|Guyton and Hall|14th ed.|Hall, J.E.|Elsevier|2021|978-0-323-59712-5|Physiology"
+medforge textbook-add "notes.pdf|Lecture Notes|embed=0"
+```
+
+---
+
+### `medforge textbook-info <edition_id>` — Inspect Provenance
+
+Edition metadata, chapter/section tree with page ranges, and the first 60
+page rows (extraction + OCR status).
+
+```bash
+medforge textbook-info a310036ac208599e
+```
+
+---
+
+### `medforge textbook-link <topic>|<edition_id>[|node_id][|type]` — Link Evidence
+
+Connects a curriculum topic to a textbook chapter/section (or the whole
+edition). Idempotent; type is `primary` (default), `supporting` or
+`supplementary`.
+
+```bash
+medforge textbook-link "GH axis|a310036ac208599e"
+medforge textbook-link "GH axis|a310036ac208599e|<section_id>|supporting"
+```
+
+---
+
+### `medforge textbook-evidence <topic>` — Discover Linked Evidence
+
+Linked textbook sources for a curriculum topic with bounded page previews.
+
+```bash
+medforge textbook-evidence "GH axis"
+```
+
+---
+
 ### `medforge migrate` — Run V3 Migration
 
 Explicitly run the V3 database migration (normally auto-run on first use).
@@ -307,6 +364,9 @@ medforge dashboard
 - **ASK** — Question answering
 - **CURRICULUM** — Syllabus import, progress metrics, curriculum tree,
   topic-traceability lookup, prerequisite form
+- **TEXTBOOKS** — Register/ingest textbooks, inspect editions + chapters +
+  page provenance, link curriculum topics to textbook evidence, discover
+  linked sources (see `TEXTBOOKS.md`)
 - **LIBRARY** — Upload PDFs
 - **HISTORY** — Browse generated packs
 - **STATUS** — System health

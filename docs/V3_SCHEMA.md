@@ -293,6 +293,32 @@ and self-healing on first curriculum use; it also adds the unique
 `idx_curriculum_parent_title` index (parent COALESCEd, so root titles are
 covered) and `idx_curriculum_type_order`. See `docs/CURRICULUM.md`.
 
+### V5 textbook enums
+`TEXTBOOK_NODE_TYPES` = `('Chapter', 'Section', 'Subsection')` ·
+`TEXTBOOK_SOURCE_TYPES` = `('textbook', 'lecture_notes', 'handout',
+'guideline', 'paper', 'other')` · `TEXTBOOK_PAGE_STATUS` = `('ok', 'no_text',
+'error')` · `TEXTBOOK_OCR_STATUS` = `('not_needed', 'pending', 'unavailable',
+'complete')` · `TEXTBOOK_INGEST_STATUS` = `('REGISTERED', 'EXTRACTED',
+'PARTIAL', 'FAILED')` · `CURRICULUM_TEXT_LINK_TYPES` = `('primary',
+'supporting', 'supplementary')`.
+
+## V5 Textbook Provenance Tables (migration `5.0.0`)
+
+Purely additive; existing tables are untouched. Full model: `docs/TEXTBOOKS.md`.
+
+| Table | Purpose | Key columns |
+| --- | --- | --- |
+| `textbook_documents` | Book family (stable across editions) | id, title, authors, publisher, edition_label, publication_year, isbn, subject, source_type |
+| `textbook_editions` | One row per distinct content hash | id, document_id, **content_hash (unique)**, source_path, page_count, extracted_pages, skipped_pages, chunk_count, ocr_status, ingest_status, ingested_at |
+| `textbook_nodes` | Chapter → Section → Subsection tree | id, edition_id, parent_id, node_type, code, title, order_index, start_page, end_page |
+| `textbook_pages` | Page-level provenance (one row per PDF page) | id (`edition:pN`), edition_id, page_number, node_id, text_chars, extraction_status, ocr_status |
+| `textbook_chunks` | Structural chunks with stable locators | id, edition_id, document_id, node_id, page_number, chunk_index, text, text_hash, word_count, locator |
+| `curriculum_text_links` | Curriculum topic ↔ textbook evidence | curriculum_node_id, edition_id, node_id, page_start, page_end, link_type, note; **unique (curriculum, edition, COALESCE(node,''))** |
+
+Defined in `core/database/schema.py` (`V5_SCHEMA_DDL`); applied by
+`core/database/migrate_v5.py::ensure_textbook_v5()` (idempotent, self-healing,
+optional verified backup at `backups/medforge_pre_v5_backup.db`).
+
 ### `PREREQUISITE_TYPES`
 `('strict', 'recommended', 'co-requisite')`
 

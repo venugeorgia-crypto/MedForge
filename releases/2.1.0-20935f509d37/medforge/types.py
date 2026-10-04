@@ -80,6 +80,34 @@ CURRICULUM_NODE_TYPES: Final[tuple[str, ...]] = NODE_TYPES + (
     "Subject", "Week", "Seminar",
 )
 
+# V5 textbook provenance enums (mirror core.database.schema).
+TEXTBOOK_NODE_TYPES: Final[tuple[str, ...]] = ("Chapter", "Section", "Subsection")
+TEXTBOOK_SOURCE_TYPES: Final[tuple[str, ...]] = (
+    "textbook", "lecture_notes", "handout", "guideline", "paper", "other"
+)
+TEXTBOOK_PAGE_STATUS: Final[tuple[str, ...]] = ("ok", "no_text", "error")
+TEXTBOOK_OCR_STATUS: Final[tuple[str, ...]] = (
+    "not_needed", "pending", "unavailable", "complete"
+)
+TEXTBOOK_INGEST_STATUS: Final[tuple[str, ...]] = (
+    "REGISTERED", "EXTRACTED", "PARTIAL", "FAILED"
+)
+CURRICULUM_TEXT_LINK_TYPES: Final[tuple[str, ...]] = (
+    "primary", "supporting", "supplementary"
+)
+
+# Explicit source hierarchy (ranking hints, NOT accuracy scores). Textbook
+# evidence linked to the curriculum outranks authoritative online sources,
+# which outrank generic trusted web content. Values plug into the existing
+# `quality` column so retrieval needs no special-casing.
+SOURCE_PRIORITY: Final[dict[str, float]] = {
+    "textbook": 0.95,
+    "course_pdf": 0.90,
+    "guideline": 0.92,
+    "pubmed": 0.96,
+    "web": 0.84,
+}
+
 # ─── System Prompt ───
 SYSTEM_EVIDENCE: Final[str] = """You are MedForge, a cautious medical education assistant.
 Use ONLY the supplied evidence for factual medical claims.

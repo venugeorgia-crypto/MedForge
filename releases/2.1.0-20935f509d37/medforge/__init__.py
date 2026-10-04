@@ -30,6 +30,13 @@ from medforge.types import (
     SPACED_REPETITION_ITEM_TYPES,
     MEDICAL_PUBLICATION_TYPES,
     CURRICULUM_NODE_TYPES,
+    TEXTBOOK_NODE_TYPES,
+    TEXTBOOK_SOURCE_TYPES,
+    TEXTBOOK_PAGE_STATUS,
+    TEXTBOOK_OCR_STATUS,
+    TEXTBOOK_INGEST_STATUS,
+    CURRICULUM_TEXT_LINK_TYPES,
+    SOURCE_PRIORITY,
     SYSTEM_EVIDENCE,
 )
 from medforge.utils import (
@@ -69,6 +76,12 @@ from medforge.curriculum import (
     find_node, ensure_node, get_children, import_syllabus, parse_syllabus,
     add_prerequisite, remove_prerequisite, curriculum_tree, topic_path,
     curriculum_progress, detect_duplicates,
+)
+from medforge.textbook import (
+    ensure_textbook_tables, resolve_metadata, register_textbook,
+    ingest_textbook, list_textbooks, book_structure, link_curriculum_text,
+    unlink_curriculum_text, textbook_evidence_for_topic,
+    suggest_curriculum_links, registered_source_paths,
 )
 
 __version__ = VERSION
@@ -113,4 +126,12 @@ __all__ = [
     "find_node", "ensure_node", "get_children", "import_syllabus",
     "parse_syllabus", "add_prerequisite", "remove_prerequisite",
     "curriculum_tree", "topic_path", "curriculum_progress", "detect_duplicates",
+    # textbook provenance (V5)
+    "TEXTBOOK_NODE_TYPES", "TEXTBOOK_SOURCE_TYPES", "TEXTBOOK_PAGE_STATUS",
+    "TEXTBOOK_OCR_STATUS", "TEXTBOOK_INGEST_STATUS", "CURRICULUM_TEXT_LINK_TYPES",
+    "SOURCE_PRIORITY",
+    "ensure_textbook_tables", "resolve_metadata", "register_textbook",
+    "ingest_textbook", "list_textbooks", "book_structure", "link_curriculum_text",
+    "unlink_curriculum_text", "textbook_evidence_for_topic",
+    "suggest_curriculum_links", "registered_source_paths",
 ]

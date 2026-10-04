@@ -93,12 +93,17 @@ def get_collection():
     return client.get_or_create_collection(name, metadata={"hnsw:space": "cosine"})
 
 
-def upsert_records(records: List[Dict[str, Any]]) -> int:
-    """Upsert chunk records into ChromaDB and the SQLite metadata store."""
+def upsert_records(records: List[Dict[str, Any]], embed_text: bool = True) -> int:
+    """Upsert chunk records into ChromaDB and the SQLite metadata store.
+
+    embed_text=False skips embeddings/Chroma and stores SQLite + FTS only;
+    such chunks stay keyword-searchable until re-embedded. The default keeps
+    the original behavior for every existing caller.
+    """
     if not records:
         return 0
     init_db()
-    col = get_collection()
+    col = get_collection() if embed_text else None
     con = sqlite3.connect(T.META_DB)
     done = 0
 
@@ -107,20 +112,21 @@ def upsert_records(records: List[Dict[str, Any]]) -> int:
 
     try:
         for b in batch(records, 4):
-            texts = [x["text"] for x in b]
-            vecs = embed(texts)
             ids = [x["id"] for x in b]
-            metas = []
-            for x in b:
-                m = x["metadata"]
-                metas.append({
-                    "source": m.get("source", ""),
-                    "locator": m.get("locator", ""),
-                    "kind": m.get("kind", ""),
-                    "url": m.get("url", ""),
-                    "quality": float(m.get("quality", 0.5)),
-                })
-            col.upsert(ids=ids, documents=texts, embeddings=vecs, metadatas=metas)
+            if embed_text:
+                texts = [x["text"] for x in b]
+                vecs = embed(texts)
+                metas = []
+                for x in b:
+                    m = x["metadata"]
+                    metas.append({
+                        "source": m.get("source", ""),
+                        "locator": m.get("locator", ""),
+                        "kind": m.get("kind", ""),
+                        "url": m.get("url", ""),
+                        "quality": float(m.get("quality", 0.5)),
+                    })
+                col.upsert(ids=ids, documents=texts, embeddings=vecs, metadatas=metas)
 
             for x in b:
                 m = x["metadata"]

@@ -47,7 +47,7 @@ def show_pack(out, key):
                 z.write(f, f.name)
     st.download_button("Download complete pack",data.getvalue(),file_name=out.parent.name+"-"+out.name+".zip",mime="application/zip",key=key)
 
-tabs=st.tabs(["PRODUCT","STUDY","REVIEW","ASK","CURRICULUM","LIBRARY","HISTORY","STATUS"])
+tabs=st.tabs(["PRODUCT","STUDY","REVIEW","ASK","CURRICULUM","TEXTBOOKS","LIBRARY","HISTORY","STATUS"])
 with tabs[0]:
     topic=st.text_input("What do you want to learn?",placeholder="cardiac cycle",max_chars=250)
     st.caption("PDFs + PubMed + authoritative web pages → study guide, workbook, cards, quiz and scripts.")
@@ -238,6 +238,61 @@ with tabs[4]:
                     st.success(f"Recorded: {pre_req} → {pre_topic} ({pre_type})")
                 except Exception as e: show_error(e)
 with tabs[5]:
+    st.caption("Registered textbooks with stable edition identity and page/section provenance. Re-importing the same file is idempotent; a changed edition becomes a new version.")
+    try:
+        books=mf.list_textbooks()
+    except Exception as e:
+        books=[]; show_error(e)
+    editions=[(f"{d['title']} · {e.get('edition_label') or 'edition'} · {e['id']} · {e['ingest_status']}",e["id"]) for d in books for e in d["editions"]]
+    with st.expander(f"Registered textbooks ({len(editions)} edition(s))"):
+        for label,_eid in editions: st.markdown("- "+label)
+        if not editions: st.caption("None yet — add a textbook PDF below.")
+    t1,t2,t3=st.columns([3,2,2])
+    tb_path=t1.text_input("Textbook PDF path",key="tb_path",placeholder="/Users/…/textbook.pdf")
+    tb_title=t2.text_input("Title (optional)",key="tb_title")
+    tb_edition=t3.text_input("Edition (optional)",key="tb_edition")
+    if st.button("Register & ingest",type="primary") and tb_path.strip():
+        with st.spinner("Extracting page-wise structure..."):
+            try:
+                res=mf.ingest_textbook(tb_path.strip(),embed_text=not mf.OFFLINE,title=tb_title.strip() or None,edition=tb_edition.strip() or None)
+                st.success(f"{'Re-used existing' if res.get('skipped') else 'Ingested'} {res['title']}: {res['pages_extracted']}/{res['pages']} pages, {res['chapters']} chapters, {res['chunks_total']} chunks, status {res['ingest_status']}"+(f" · OCR pending for {res['pages_no_text']} page(s)" if res['pages_no_text'] else ""))
+            except Exception as e: show_error(e)
+    if editions:
+        pick=st.selectbox("Inspect edition",[l for l,_ in editions],key="tb_pick")
+        eid=dict(editions)[pick]
+        try:
+            info=mf.book_structure(eid)
+            e=info["edition"]; d=info["document"]
+            c1,c2,c3,c4=st.columns(4)
+            c1.metric("Pages",e["page_count"]); c2.metric("Extracted",e["extracted_pages"])
+            c3.metric("No text (OCR pending)",e["skipped_pages"]); c4.metric("Chunks",e["chunk_count"])
+            st.caption(f"{d['title']} · {d.get('authors') or 'authors n/a'} · {d.get('publisher') or 'publisher n/a'} · {d.get('publication_year') or 'year n/a'} · ISBN {d.get('isbn') or 'n/a'} · hash {e['content_hash'][:12]}… · {e['ingest_status']}")
+            with st.expander("Chapters & sections"): st.json(info["nodes"])
+            with st.expander(f"Pages (first {len(info['pages'])} of {info['pages_total']})"): st.dataframe(info["pages"],width="stretch",hide_index=True)
+        except Exception as e: show_error(e)
+        with st.expander("Link curriculum topic → textbook evidence"):
+            l1,l2,l3=st.columns([2,2,1])
+            link_topic=l1.text_input("Curriculum topic",key="tb_link_topic")
+            link_node=l2.text_input("Chapter/section id (optional)",key="tb_link_node")
+            link_type=l3.selectbox("Link type",list(mf.CURRICULUM_TEXT_LINK_TYPES),0,key="tb_link_type")
+            if st.button("Create link") and link_topic.strip():
+                try:
+                    res=mf.link_curriculum_text(link_topic.strip(),eid,node_id=link_node.strip() or None,link_type=link_type)
+                    st.success(("Linked" if res["created"] else "Link already existed")+f": {res['curriculum_node']['title']}")
+                except Exception as e: show_error(e)
+        with st.expander("Discover textbook evidence for a topic"):
+            ev_topic=st.text_input("Topic or curriculum node id",key="tb_ev_topic")
+            if st.button("Find evidence") and ev_topic.strip():
+                try:
+                    ev=mf.textbook_evidence_for_topic(ev_topic.strip())
+                    if ev["count"]==0: st.info("No linked textbook evidence yet for this topic.")
+                    else:
+                        st.success(f"{ev['count']} linked source(s) for '{ev['curriculum_node']['title']}'")
+                        for link in ev["links"]:
+                            st.markdown(f"**{link.get('textbook_node_title') or link['document_title']}** · {link['link_type']} · p. {link.get('start_page') or link.get('page_start') or '?'}–{link.get('end_page') or link.get('page_end') or '?'}")
+                            for pv in link["previews"]: st.caption(pv["locator"]+" — "+pv["text"][:180])
+                except Exception as e: show_error(e)
+with tabs[6]:
     st.caption("Add medical PDFs you are entitled to use. Changed files are indexed on the next product run.")
     uploads=st.file_uploader("Add PDFs",type=["pdf"],accept_multiple_files=True)
     if st.button("Save selected PDFs"):
@@ -253,7 +308,7 @@ with tabs[5]:
             st.success("Saved "+target.name)
     st.code(str(mf.DOCS),language=None)
     st.caption("Scanned PDFs with no readable text are reported. OCR is not yet included.")
-with tabs[6]:
+with tabs[7]:
     states=sorted(mf.PRODUCTS.glob("*/v*/state.json"),key=lambda p:p.stat().st_mtime,reverse=True)
     if not states: st.info("Your generated packs will appear here.")
     for path in states[:30]:
@@ -262,7 +317,7 @@ with tabs[6]:
         with st.expander(f"{state.get('topic','Topic')} · {path.parent.name} · {'Draft complete' if state.get('complete') else 'In progress'}"):
             if state.get("complete"): show_pack(path.parent,"history-"+str(path))
             else: st.caption("Enter this topic in PRODUCT to resume compatible saved work.")
-with tabs[7]:
+with tabs[8]:
     try:
         s=mf.status()
         a,b,c=st.columns(3)

@@ -83,6 +83,128 @@ CREATE INDEX IF NOT EXISTS idx_curriculum_type_order
     ON curriculum_nodes(node_type, order_index);
 """
 
+# ─── V5: textbook provenance (book → chapter → section → page → chunk) ───
+# First-class document/edition entities with stable deterministic ids so a
+# future claim (P4) can point to exact evidence and re-imports stay idempotent.
+TEXTBOOK_NODE_TYPES = ("Chapter", "Section", "Subsection")
+TEXTBOOK_SOURCE_TYPES = (
+    "textbook", "lecture_notes", "handout", "guideline", "paper", "other"
+)
+TEXTBOOK_PAGE_STATUS = ("ok", "no_text", "error")
+TEXTBOOK_OCR_STATUS = ("not_needed", "pending", "unavailable", "complete")
+TEXTBOOK_INGEST_STATUS = ("REGISTERED", "EXTRACTED", "PARTIAL", "FAILED")
+CURRICULUM_TEXT_LINK_TYPES = ("primary", "supporting", "supplementary")
+
+V5_SCHEMA_DDL = """
+-- 1. Textbook documents (stable across editions)
+CREATE TABLE IF NOT EXISTS textbook_documents (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    authors TEXT DEFAULT '',
+    publisher TEXT DEFAULT '',
+    edition_label TEXT DEFAULT '',
+    publication_year INTEGER NULL,
+    isbn TEXT DEFAULT '',
+    subject TEXT DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'textbook' CHECK(source_type IN ('textbook', 'lecture_notes', 'handout', 'guideline', 'paper', 'other')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- 2. Textbook editions (one row per distinct content hash; never overwritten)
+CREATE TABLE IF NOT EXISTS textbook_editions (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES textbook_documents(id) ON DELETE CASCADE,
+    content_hash TEXT NOT NULL,
+    source_path TEXT DEFAULT '',
+    page_count INTEGER NOT NULL DEFAULT 0,
+    extracted_pages INTEGER NOT NULL DEFAULT 0,
+    skipped_pages INTEGER NOT NULL DEFAULT 0,
+    chunk_count INTEGER NOT NULL DEFAULT 0,
+    ocr_status TEXT NOT NULL DEFAULT 'not_needed' CHECK(ocr_status IN ('not_needed', 'pending', 'unavailable', 'complete')),
+    ocr_confidence REAL NULL,
+    ingest_status TEXT NOT NULL DEFAULT 'REGISTERED' CHECK(ingest_status IN ('REGISTERED', 'EXTRACTED', 'PARTIAL', 'FAILED')),
+    ingested_at TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(content_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tb_editions_doc ON textbook_editions(document_id);
+
+-- 3. Chapter / Section / Subsection hierarchy
+CREATE TABLE IF NOT EXISTS textbook_nodes (
+    id TEXT PRIMARY KEY,
+    edition_id TEXT NOT NULL REFERENCES textbook_editions(id) ON DELETE CASCADE,
+    parent_id TEXT NULL REFERENCES textbook_nodes(id) ON DELETE CASCADE,
+    node_type TEXT NOT NULL CHECK(node_type IN ('Chapter', 'Section', 'Subsection')),
+    code TEXT DEFAULT '',
+    title TEXT NOT NULL,
+    order_index INTEGER NOT NULL DEFAULT 0,
+    start_page INTEGER NULL,
+    end_page INTEGER NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tb_nodes_edition ON textbook_nodes(edition_id);
+CREATE INDEX IF NOT EXISTS idx_tb_nodes_parent ON textbook_nodes(parent_id);
+
+-- 4. Page-level provenance (one row per PDF page)
+CREATE TABLE IF NOT EXISTS textbook_pages (
+    id TEXT PRIMARY KEY,
+    edition_id TEXT NOT NULL REFERENCES textbook_editions(id) ON DELETE CASCADE,
+    page_number INTEGER NOT NULL CHECK(page_number >= 1),
+    node_id TEXT NULL REFERENCES textbook_nodes(id) ON DELETE SET NULL,
+    text_chars INTEGER NOT NULL DEFAULT 0,
+    extraction_status TEXT NOT NULL DEFAULT 'ok' CHECK(extraction_status IN ('ok', 'no_text', 'error')),
+    ocr_status TEXT NOT NULL DEFAULT 'not_needed' CHECK(ocr_status IN ('not_needed', 'pending', 'unavailable', 'complete')),
+    created_at TEXT NOT NULL,
+    UNIQUE(edition_id, page_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tb_pages_edition ON textbook_pages(edition_id, page_number);
+CREATE INDEX IF NOT EXISTS idx_tb_pages_node ON textbook_pages(node_id);
+
+-- 5. Structural chunks (mirror rows in the shared `chunks` store for retrieval)
+CREATE TABLE IF NOT EXISTS textbook_chunks (
+    id TEXT PRIMARY KEY,
+    edition_id TEXT NOT NULL REFERENCES textbook_editions(id) ON DELETE CASCADE,
+    document_id TEXT NOT NULL,
+    node_id TEXT NULL REFERENCES textbook_nodes(id) ON DELETE SET NULL,
+    page_number INTEGER NULL,
+    chunk_index INTEGER NOT NULL DEFAULT 0,
+    text TEXT NOT NULL,
+    text_hash TEXT NOT NULL,
+    word_count INTEGER NOT NULL DEFAULT 0,
+    locator TEXT DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tb_chunks_edition ON textbook_chunks(edition_id, page_number, chunk_index);
+CREATE INDEX IF NOT EXISTS idx_tb_chunks_node ON textbook_chunks(node_id);
+
+-- 6. Curriculum ↔ textbook evidence links
+CREATE TABLE IF NOT EXISTS curriculum_text_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    curriculum_node_id TEXT NOT NULL REFERENCES curriculum_nodes(id) ON DELETE CASCADE,
+    edition_id TEXT NOT NULL REFERENCES textbook_editions(id) ON DELETE CASCADE,
+    node_id TEXT NULL REFERENCES textbook_nodes(id) ON DELETE SET NULL,
+    page_start INTEGER NULL,
+    page_end INTEGER NULL,
+    link_type TEXT NOT NULL DEFAULT 'primary' CHECK(link_type IN ('primary', 'supporting', 'supplementary')),
+    note TEXT DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ctl_curriculum ON curriculum_text_links(curriculum_node_id);
+CREATE INDEX IF NOT EXISTS idx_ctl_edition ON curriculum_text_links(edition_id);
+-- COALESCE'd so a link without a specific node still dedupes (NULLs are
+-- distinct in bare unique indexes — lesson from the V4 curriculum index).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ctl_unique
+    ON curriculum_text_links(curriculum_node_id, edition_id, COALESCE(node_id, ''));
+"""
+
 # V3 Schema DDL statements
 V3_SCHEMA_DDL = """
 -- Migration tracking table

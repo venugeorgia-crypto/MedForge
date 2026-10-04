@@ -41,6 +41,11 @@ from medforge import (  # noqa: E402
     find_node, ensure_node, get_children, import_syllabus, parse_syllabus,
     add_prerequisite, remove_prerequisite, curriculum_tree, topic_path,
     curriculum_progress, detect_duplicates,
+    ensure_textbook_tables, resolve_metadata, register_textbook,
+    ingest_textbook, list_textbooks, book_structure, link_curriculum_text,
+    unlink_curriculum_text, textbook_evidence_for_topic,
+    suggest_curriculum_links, registered_source_paths,
+    SOURCE_PRIORITY, CURRICULUM_TEXT_LINK_TYPES,
     mkdirs, sh, slugify, utcnow, atomic_text, job_lock, serialized, chunks, batch,
 )
 
@@ -68,6 +73,10 @@ def main() -> None:
               "review <item_id> <grade 0-5> [sm2|fsrs] | import-cards [topic] | "
               "syllabus [file] | curriculum | path <topic> | "
               "prereq <topic>|<prerequisite> [|strict|recommended|co-requisite] | "
+              "textbooks | textbook-add <pdf>[|title|edition|authors|publisher|year|isbn|subject][|embed=0] | "
+              "textbook-info <edition_id> | "
+              "textbook-link <topic>|<edition_id>[|<node_id>][|primary|supporting|supplementary] | "
+              "textbook-evidence <topic> | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -169,6 +178,48 @@ def main() -> None:
                 'Usage: medforge_core prereq "<topic>|<prerequisite>[|type]"'
             )
         print(json.dumps(add_prerequisite(parts[0], parts[1], parts[2]), indent=2))
+    elif cmd == "textbooks":
+        print(json.dumps(list_textbooks(), indent=2))
+    elif cmd == "textbook-add":
+        # textbook-add <pdf>[|title|edition|authors|publisher|year|isbn|subject][|embed=0]
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if not parts or not parts[0]:
+            raise SystemExit(
+                "Usage: medforge_core textbook-add <pdf>"
+                "[|title|edition|authors|publisher|year|isbn|subject][|embed=0]"
+            )
+        embed = not any(p.lower() == "embed=0" for p in parts)
+        fields = [p for p in parts[1:] if p.lower() != "embed=0"]
+        keys = ["title", "edition", "authors", "publisher",
+                "publication_year", "isbn", "subject"]
+        meta: Dict[str, Any] = {}
+        for key, value in zip(keys, fields):
+            if not value:
+                continue
+            meta[key] = int(value) if key == "publication_year" else value
+        print(json.dumps(ingest_textbook(parts[0], embed_text=embed, **meta), indent=2))
+    elif cmd == "textbook-info":
+        if not arg:
+            raise SystemExit("Usage: medforge_core textbook-info <edition_id>")
+        print(json.dumps(book_structure(arg), indent=2))
+    elif cmd == "textbook-link":
+        # textbook-link <topic>|<edition_id>[|<node_id>][|link_type]
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if len(parts) < 2 or not parts[0] or not parts[1]:
+            raise SystemExit(
+                "Usage: medforge_core textbook-link <topic>|<edition_id>"
+                "[|<textbook_node_id>][|primary|supporting|supplementary]"
+            )
+        node_id = parts[2] if len(parts) > 2 and parts[2] else None
+        link_type = parts[3] if len(parts) > 3 and parts[3] else "primary"
+        print(json.dumps(
+            link_curriculum_text(parts[0], parts[1], node_id=node_id,
+                                 link_type=link_type), indent=2,
+        ))
+    elif cmd == "textbook-evidence":
+        if not arg:
+            raise SystemExit("Usage: medforge_core textbook-evidence <topic>")
+        print(json.dumps(textbook_evidence_for_topic(arg.strip()), indent=2))
     elif cmd == "migrate":
         with job_lock():
             print(json.dumps(migrate_database(), indent=2))
