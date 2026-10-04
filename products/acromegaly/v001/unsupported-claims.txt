@@ -1,0 +1,110 @@
+Citation-label scan only; semantic support has NOT been verified.
+study-guide.md [no source label]: Educational study aid — verify important claims against the cited sources.
+quiz.md [no source label]: **A)** Adrenocorticotropic hormone
+quiz.md [no source label]: **B)** Thyroid-stimulating hormone
+quiz.md [no source label]: **C)** Growth hormone
+quiz.md [no source label]: **A)** Serum cortisol
+quiz.md [no source label]: **B)** Serum insulin-like growth factor 1 (IGF-1)
+quiz.md [no source label]: **C)** Lack of growth hormone suppression after glucose administration
+quiz.md [no source label]: **D)** Serum TSH level
+quiz.md [no source label]: **A)** Adrenal adenoma
+quiz.md [no source label]: **B)** Pituitary adenoma
+quiz.md [no source label]: **C)** Thyroid carcinoma
+quiz.md [no source label]: **D)** Pancreatic tumor
+quiz.md [no source label]: **A)** Hypothyroidism
+quiz.md [no source label]: **B)** Diabetes mellitus
+quiz.md [no source label]: **C)** Hyperuricemia
+quiz.md [no source label]: **D)** Hyperlipidemia
+quiz.md [no source label]: **A)** Obesity is always present
+quiz.md [no source label]: **B)** Insulin resistance occurs independently of obesity
+quiz.md [no source label]: **C)** Glucose uptake increases in adipose tissue
+quiz.md [no source label]: **D)** Insulin resistance is due to diet
+quiz.md [no source label]: **A)** Hypothyroidism
+quiz.md [no source label]: **B)** Cardiovascular disease
+quiz.md [no source label]: **A)** Radiation therapy
+quiz.md [no source label]: **B)** Somatostatin receptor ligands
+quiz.md [no source label]: **C)** Transsphenoidal pituitary surgery
+quiz.md [no source label]: **D)** Cabergoline monotherapy
+quiz.md [no source label]: **A)** Patients with small, non-invasive tumors
+quiz.md [no source label]: **B)** Patients with macroadenomas
+quiz.md [no source label]: **C)** Patients under 30 years old
+quiz.md [no source label]: **D)** Patients with low IGF-1 levels
+quiz.md [no source label]: **C)** Levothyroxine
+quiz.md [no source label]: **D)** Spironolactone
+quiz.md [no source label]: **A)** Low IGF-1 levels at diagnosis
+quiz.md [no source label]: **B)** High IGF-1 levels at diagnosis
+quiz.md [no source label]: **C)** Normal growth hormone levels
+quiz.md [no source label]: **D)** Absence of comorbidities
+quiz.md [no source label]: **A)** Children under 10
+quiz.md [no source label]: **B)** Middle-aged adults
+quiz.md [no source label]: **C)** Elderly patients
+quiz.md [no source label]: **D)** Pregnant women
+quiz.md [no source label]: **A)** Rapid progression of symptoms
+quiz.md [no source label]: **B)** Delayed diagnosis due to insidious onset
+quiz.md [no source label]: **C)** Lack of laboratory tests
+quiz.md [no source label]: **D)** Absence of clinical symptoms
+quiz.md [no source label]: **A)** Growth hormone enhances insulin signaling
+quiz.md [no source label]: **B)** Growth hormone stimulates insulin production
+quiz.md [no source label]: **C)** Growth hormone directly attenuates insulin signaling
+quiz.md [no source label]: **D)** Growth hormone has no effect on insulin
+quiz.md [no source label]: **A)** Young age at diagnosis
+quiz.md [no source label]: **B)** Low growth hormone levels
+quiz.md [no source label]: **C)** Older age and higher GH levels at last follow-up
+quiz.md [no source label]: **D)** Normal IGF-1 levels
+quiz.md [no source label]: **A)** Increased risk of benign or malignant tumors
+quiz.md [no source label]: **B)** Decreased risk of cancer
+quiz.md [no source label]: **C)** Improved immune function
+quiz.md [no source label]: **D)** Reduced cardiovascular risk
+quiz.md [no source label]: **A)** Annual physical exams only
+quiz.md [no source label]: **B)** Rigorous surveillance of endocrine diseases
+quiz.md [no source label]: **C)** Routine cancer screening without personalization
+quiz.md [no source label]: **D)** No surveillance needed
+quiz.md [no source label]: **A)** It improves with increasing age
+quiz.md [no source label]: **B)** It correlates inversely with age
+quiz.md [no source label]: **C)** It is unaffected by age
+quiz.md [no source label]: **D)** It improves with younger age
+quiz.md [no source label]: **A)** Lack of awareness among clinicians
+quiz.md [no source label]: **B)** Limited research on management strategies
+quiz.md [no source label]: **C)** Absence of diagnostic tools
+quiz.md [no source label]: **D)** Inadequate patient follow-up
+quiz.md [no source label]: **A)** Radiation therapy
+quiz.md [no source label]: **B)** Somatostatin receptor ligands
+quiz.md [no source label]: **A)** Lack of symptoms
+quiz.md [no source label]: **B)** Similarities between aging and disease characteristics
+quiz.md [no source label]: **C)** Inadequate screening
+quiz.md [no source label]: **D)** Poor patient awareness
+viva.md [no source label]: 1. What is the primary cause of acromegaly?
+viva.md [no source label]: 2. What is the key biochemical marker used to confirm acromegaly?
+viva.md [no source label]: 3. How does growth hormone contribute to insulin resistance in acromegaly?
+viva.md [no source label]: 4. Why is diabetes mellitus common in patients with acromegaly?
+viva.md [no source label]: 5. What is the typical age of onset for acromegaly?
+viva.md [no source label]: 6. Why is acromegaly more frequently diagnosed in the elderly today?
+viva.md [no source label]: 7. What is the first-line treatment for acromegaly?
+viva.md [no source label]: 8. What comorbidities are associated with acromegaly?
+viva.md [no source label]: 9. What are the main medical therapies used for acromegaly?
+viva.md [no source label]: 10. How does acromegaly affect mortality?
+viva.md [no source label]: 11. What factors are independent predictors of mortality in acromegaly?
+viva.md [no source label]: 12. Is there a proven link between acromegaly and cancer development?
+viva.md [no source label]: 13. What imaging study is recommended in acromegaly patients?
+viva.md [no source label]: 14. Why is early diagnosis crucial in acromegaly?
+viva.md [no source label]: 15. What is the significance of diabetes mellitus in acromegaly patients?
+case-exercises.md [no source label]: **Mini-Case 1: Delayed Diagnosis in an Elderly Patient**
+case-exercises.md [no source label]: **Mini-Case 2: Diabetes Mellitus in Acromegaly**
+case-exercises.md [no source label]: **Mini-Case 3: Treatment Options for Acromegaly**
+case-exercises.md [no source label]: **Mini-Case 4: Cardiovascular Risk in Acromegaly**
+case-exercises.md [no source label]: **Mini-Case 5: Mortality and Disease Control**
+cheat-sheet.md [no source label]: **Mechanism Chain**:
+cheat-sheet.md [no source label]: **Must-Know Facts**:
+cheat-sheet.md [no source label]: **Red-Flag Confusions**:
+cheat-sheet.md [no source label]: **Quick Recall Prompts**:
+explainer-3min.txt [no source label]: [Opening – Strong and engaging]
+explainer-3min.txt [no source label]: [Mechanism – Clear and evidence-based]
+explainer-3min.txt [no source label]: [Exam relevance – Direct and practical]
+explainer-3min.txt [no source label]: [Final recap – Concise and memorable]
+instagram-carousel.md [no source label]: Acromegaly is a rare but serious endocrine disorder that silently progresses over years — often going undiagnosed until symptoms become severe.
+instagram-carousel.md [no source label]: It begins with excess growth hormone, leading to abnormal tissue growth and a range of complications.
+product-description.md [no source label]: This educational study pack provides a concise, evidence-based overview of acromegaly, designed for medical students and healthcare professionals seeking foundational knowledge.
+product-description.md [no source label]: This study pack is intended for educational purposes only and is not a substitute for medical diagnosis or treatment. It does not provide individualized patient care recommendations.
+product-description.md [no source label]: All factual medical content is derived from the provided evidence and is supported by peer-reviewed sources. The information presented is for learning and study use only and should not be interpreted as medical advice.
+product-description.md [no source label]: This material is not intended to guarantee any clinical outcomes or treatment results. Use of this content does not imply endorsement of any specific therapy or clinical approach.
+product-description.md [no source label]: This educational aid is not a diagnostic tool and should not be used to make clinical decisions. Always consult current clinical guidelines and a qualified healthcare provider for patient care.

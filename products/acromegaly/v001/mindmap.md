@@ -1,0 +1,17 @@
+- Acromegaly  
+  - Definition: A slow-developing disease caused by hypersecretion of growth hormone and insulin-like growth factor 1 [S1].  
+  - Etiology: Most commonly due to a pituitary adenoma leading to excess growth hormone secretion [S3].  
+  - Diagnosis: Confirmed biochemically by elevated serum insulin-like growth factor 1 and lack of growth hormone suppression after glucose administration [S4].  
+  - Imaging: Pituitary magnetic resonance imaging is advised to identify underlying pituitary adenoma [S4].  
+  - Clinical course: Often missed for years, resulting in delayed diagnosis [S2].  
+  - Onset: Typically diagnosed in the 3rd to 4th decade of life, though incidence increases in the elderly due to rising life expectancy [S5].  
+  - Comorbidities: Associated with cardiovascular, respiratory, metabolic, musculoskeletal, and neoplastic complications [S4].  
+  - Diabetes mellitus: Occurs in approximately one-third of patients; driven by growth hormone-induced insulin resistance and lipolysis, leading to reduced glucose uptake despite lean body mass [S3].  
+  - Insulin resistance: Occurs independently of obesity and is paradoxically linked to reduced body adipose tissue mass [S3].  
+  - Mortality: Increased morbidity and mortality are associated with acromegaly; mortality correlates with older age, longer disease duration, and higher last GH and IGF-1 levels [S6].  
+  - Cancer risk: Long-term growth hormone exposure may increase risk of benign or malignant tumors; association remains debated due to limited epidemiological data [S6].  
+  - Treatment: Transsphenoidal pituitary surgery is first-line therapy; patients with macroadenomas often fail to achieve remission postoperatively [S4].  
+  - Medical therapies: Somatostatin receptor ligands, cabergoline, and pegvisomant are used as primary or postoperative treatments [S4].  
+  - Prognosis: Worsens with increasing age, longer disease duration, and higher last GH levels [S5].  
+  - Management of diabetes: Preventive measures and optimized treatment are essential due to increased cardiovascular risk; specific management recommendations are lacking [S3].  
+  - Surveillance: Rigorous monitoring of endocrine diseases may improve early tumor detection; personalized screening may be warranted [S6].

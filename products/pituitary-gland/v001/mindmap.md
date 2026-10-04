@@ -1,0 +1,50 @@
+- Pituitary Gland  
+  - Core Anatomy  
+    - Located in the bony sella turcica at the base of the brain [S2]  
+    - Attached to the hypothalamus; has a unique connection with it [S2]  
+    - Composed of two distinct regions:  
+      - Anterior lobe (adenohypophysis) – derived from embryonic ectoderm; secretes five hormones from five types of endocrine cells [S2]  
+      - Posterior lobe (neurohypophysis) – derived from hypothalamic neurons; stores and releases hormones [S2]  
+    - Intermediate lobe – small region between anterior and posterior lobes [S2]  
+  - Blood Supply  
+    - Arterial supply is critical for surgical and clinical planning [S1]  
+    - Specific vascular anatomy not detailed in provided evidence [S1]  
+  - Endocrine Function  
+    - Acts as the "master control gland" regulating growth and function of other glands [S3]  
+    - Secretes hormones that influence metabolism, growth, and reproductive function [S3]  
+  - Pituitary Tumors  
+    - Common, often asymptomatic; many people are unaware of their presence [S3]  
+    - Most common types cause hormone imbalance leading to endocrine diseases:  
+      - Hyperprolactinemia  
+      - Acromegaly  
+      - Cushing’s disease [S4]  
+    - Symptoms include:  
+      - Headaches  
+      - Vision problems  
+      - Nausea and vomiting  
+      - Hormonal imbalances disrupting body functions [S3]  
+    - Clinical relevance depends on:  
+      - Size  
+      - Location  
+      - Hormonal hyper- or hyposecretion  
+      - Visual field loss [S4]  
+  - Diagnosis and Treatment  
+    - Requires physical exam, laboratory tests, and imaging (e.g., brain MRI) [S4]  
+    - Treatment options:  
+      - Surgery (transsphenoidal) – first-line for acromegaly and Cushing’s disease [S4]  
+      - Radiation therapy – used when surgery fails [S4]  
+      - Medications – modern therapies available; individualized decisions required [S4]  
+    - Economic considerations influence treatment choices due to cost and efficacy [S4]  
+  - Imaging and Diagnostic Patterns  
+    - Dynamic CT enhancement patterns in canines show a bi-exponential curve with:  
+      - Initial rapid phase (half-time ~16.5 minutes)  
+      - Slower phase  
+      - Mean Hounsfield unit increase of 35.0% ± 4.4% above pre-contrast levels [S5]  
+    - This pattern supports early detection of microadenomas and small macroadenomas [S5]  
+  - Exam-Relevant Links  
+    - Pituitary tumors are a common clinical topic in medical exams [S3]  
+    - Hormonal disorders (e.g., Cushing’s, hyperprolactinemia) are frequently tested [S3][S4]  
+    - Transsphenoidal surgery is a key procedure for pituitary adenomas [S4]  
+    - Hypothalamic-pituitary axis regulation is a core concept in endocrinology [S2]  
+
+Note: All factual medical claims are derived from the provided evidence and cited where applicable. No unsupported or speculative statements are included.

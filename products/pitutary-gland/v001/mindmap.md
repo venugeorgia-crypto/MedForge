@@ -1,0 +1,31 @@
+- **Pituitary Gland**  
+  - **Core Anatomy**  
+    - Composed of two main lobes: anterior (adenohypophysis) and posterior (neurohypophysis) [S2]  
+    - Intermediate lobe lies between anterior and posterior lobes [S2]  
+    - Located in the sella turcica of the sphenoid bone, attached to the hypothalamus [S2]  
+  - **Endocrine Function**  
+    - Acts as the "master control gland" by secreting hormones that regulate growth and function of other endocrine glands [S4]  
+    - Anterior pituitary secretes five hormones from distinct endocrine cell types [S2]  
+    - Posterior pituitary stores and releases hormones produced by hypothalamus (oxytocin and vasopressin) [S2]  
+  - **Hormonal Regulation**  
+    - Hypothalamus regulates pituitary hormone secretion [S2]  
+    - Pituitary hormones influence hypothalamus-pituitary-adrenal (HPA) and hypothalamus-pituitary-gonadal (HPG) axes [S1]  
+  - **Clinical Relevance**  
+    - Pituitary tumors are common but often asymptomatic [S4]  
+    - Tumors may produce excess hormones, disrupting endocrine balance and causing diseases such as:  
+      - Cushing’s syndrome (due to ACTH overproduction) [S4]  
+      - Hyperthyroidism (via thyroid-stimulating hormone overproduction) [S4]  
+    - Neurological manifestations of prolactinoma include galactorrhea, mood disorders, fatigue, and amenorrhea [S6]  
+  - **Diagnosis and Imaging**  
+    - Brain MRI is used to detect pituitary tumors [S4]  
+    - Adrenocorticotropic hormone (ACTH) levels may be assessed in diagnosis [S4]  
+  - **Related Systems**  
+    - Hypothalamus-pituitary-adrenal (HPA) axis: regulates stress response via cortisol [S1]  
+    - Hypothalamus-pituitary-gonadal (HPG) axis: regulates reproductive function [S1]  
+    - Renin-angiotensin system: local synthesis of iso-renin occurs in extrarenal tissues, including in pituitary tumor models [S5]  
+  - **Treatment Options**  
+    - Surgery is the primary treatment for pituitary tumors [S4]  
+    - Alternative treatments include medications, radiation therapy, and chemotherapy [S4]  
+    - Medications such as sulpiride (eglonil) may have side effects leading to prolactinoma development [S6]  
+
+*Note: All factual medical statements are derived from the provided evidence and cited accordingly. No unsupported or speculative claims are included.*

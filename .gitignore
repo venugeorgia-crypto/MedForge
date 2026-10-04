@@ -1,0 +1,39 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv*/
+venv/
+
+# --- Local data: databases, logs, backups (never upload) ---
+# Anchored at repo root so core/database/ source is NOT excluded
+/database/
+/backups/
+/logs/
+/tmp/
+*.sqlite3
+*.sqlite3-journal
+*.db
+chroma*/
+
+# --- App runtime state ---
+model-status.json
+dashboard-runtime.json
+.dashboard.lock
+.install.lock
+.job.lock
+.installer-*
+
+# --- Machine-specific symlink to the active release ---
+current
+
+# --- Generated build artifacts ---
+INSTALL-MEDFORGE.command
+
+# --- OS / editor noise ---
+.DS_Store
+Thumbs.db
+
+# --- Agent/tooling workspace ---
+.freebuff/

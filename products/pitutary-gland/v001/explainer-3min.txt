@@ -1,0 +1,31 @@
+[Opening – Strong, engaging hook]  
+What if I told you that one tiny gland at the base of your brain controls your growth, your stress response, and even your sex hormones? That’s not sci-fi — that’s the pituitary gland. And it’s the master conductor of your endocrine system.  
+
+[Mechanism – Clear, step-by-step]  
+The pituitary gland sits nestled in the sella turcica, attached directly to the hypothalamus. It’s not a single organ — it’s split into two main parts: the anterior lobe and the posterior lobe. The anterior lobe produces five key hormones: growth hormone, thyroid-stimulating hormone, adrenocorticotropic hormone (ACTH), prolactin, and follicle-stimulating hormone (FSH) [S2]. These hormones regulate everything from metabolism to reproductive function.  
+
+The posterior lobe stores and releases two hormones: antidiuretic hormone (ADH) and oxytocin — both produced in the hypothalamus and transported to the pituitary.  
+
+And here’s the key: the hypothalamus acts as the brain’s command center, sending signals to the pituitary to release or suppress hormones. It’s a tightly regulated system — one misstep can throw your entire body’s hormone balance into chaos.  
+
+[Memorable analogy]  
+Think of the pituitary as a tiny orchestra conductor — the hypothalamus is the conductor’s baton, and the pituitary is the orchestra itself. When the conductor gives a cue, the orchestra plays. If the cue is wrong — like too much growth hormone — the music goes haywire. That’s what happens in pituitary tumors: a rogue note that disrupts the entire system.  
+
+[Exam relevance]  
+On the USMLE Step 1 and Step 2 CK, you’ll be tested on the pituitary’s hormones, their functions, and how they interact with the hypothalamus. For example, ACTH stimulates cortisol release — key in stress response. A deficiency leads to Addison’s disease; excess causes Cushing’s syndrome [S4]. Prolactinomas, which overproduce prolactin, can cause galactorrhea and amenorrhea — a classic clinical sign [S6].  
+
+Also, imaging like MRI is often used to detect pituitary tumors, especially when headaches or vision changes occur [S4].  
+
+[Final recap – concise, memorable]  
+So, in one sentence: the pituitary gland is the brain’s endocrine conductor — it receives signals from the hypothalamus and releases hormones that control growth, stress, and reproduction.  
+
+Key facts:  
+- It has two lobes: anterior (produces 5 hormones) and posterior (stores ADH and oxytocin) [S2].  
+- The hypothalamus regulates its hormone release [S2].  
+- Pituitary tumors can cause endocrine disorders like Cushing’s or hyperthyroidism [S4].  
+- Prolactinomas can cause galactorrhea and amenorrhea [S6].  
+
+All of this is foundational for endocrinology and clinical medicine — and it’s all backed by evidence [S1, S2, S4, S6].  
+
+[End]  
+Remember: the pituitary isn’t big — but its influence? It’s massive. And in medicine, that’s exactly what makes it unforgettable.

@@ -1,0 +1,16 @@
+[Opening – Strong and engaging]  
+Prolactinomas are the most common pituitary adenoma, making up about half of all pituitary neuroendocrine tumors [S2]. And here’s the thing: they’re not just rare oddities—they’re a real clinical puzzle that students must understand, especially in exams where hyperprolactinemia is a classic presentation.
+
+[Mechanism – Clear and concise]  
+Prolactinomas arise from pituitary cells that overproduce prolactin, a hormone that normally regulates milk production. But when prolactin levels rise, it suppresses the release of gonadotropin-releasing hormone, which in turn shuts down the pulsatile secretion of gonadotropins—leading to reduced fertility in women and loss of libido in men [S5]. This mechanism explains why women present with oligo/amenorrhea (about 90%) and galactorrhea (about 80%) [S5], and why men show decreased libido and potency [S1].
+
+[Memorable analogy]  
+Think of prolactin like a volume knob on a radio—when it’s turned too high, it mutes the signal from the rest of the body. The brain’s normal feedback loop is silenced, and the reproductive system goes quiet—just like a radio tuned to static. That’s why hyperprolactinemia feels like a silent shutdown of fertility [S5].
+
+[Exam relevance]  
+On USMLE and other exams, prolactinomas are frequently tested in the context of reproductive symptoms, differential diagnosis, and treatment. For instance, you’ll see questions about galactorrhea being pathognomonic in men with prolactinomas [S5], or about dopamine agonists being first-line therapy [S2]. You must know that cabergoline normalizes prolactin in up to 85% of patients and causes tumor shrinkage in up to 80% [S2]. And yes—this is a key point: dopamine agonists are the drug of choice [S1].
+
+[Final recap – structured and memorable]  
+So, to recap: prolactinomas are the most common pituitary tumor, affecting women most in their 30s to 40s [S1]. Symptoms include amenorrhea and galactorrhea in women [S5], and loss of libido in men [S1]. The mechanism involves suppression of gonadotropin release due to elevated prolactin [S5]. First-line treatment is dopamine agonists—especially cabergoline—effective in normalizing prolactin and shrinking tumors in most patients [S2]. Surgery is reserved for cases where medical therapy fails or is poorly tolerated [S1]. And in postmenopausal women, tumor behavior stabilizes, with stable prolactin levels and minimal growth [S4].  
+
+All of this is grounded in current guidelines and clinical evidence [S1][S2][S5].

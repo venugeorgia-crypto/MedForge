@@ -1,0 +1,8 @@
+[HOOK]  
+Did you know stress can disrupt female fertility?  
+
+[BODY]  
+The hypothalamic-pituitary-ovarian (HPO) axis controls ovulation and reproduction. In obesity, metabolic signals like leptin influence GnRH neurons in the hypothalamus, disrupting ovulation [S1]. Hypothalamic inflammation also contributes to ovulatory disorders independent of weight [S1]. Stress affects the HPA axis, which can dysregulate cortisol and interfere with the HPG axis, potentially increasing aggression and impacting reproductive function [S4]. Early life stress may cause long-term HPA axis dysfunction, increasing mental health risks [S6].  
+
+[RECAP]  
+Obesity and stress both disrupt hypothalamic axes that regulate reproduction and behavior [S1][S4][S6].

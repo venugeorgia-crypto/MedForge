@@ -1,0 +1,10 @@
+[HOOK]  
+Did you know your pituitary gland—just the size of a pea—acts as the body’s master control gland?  
+
+[BODY]  
+It sits at the base of the brain and connects to the hypothalamus, regulating hormone release [S2]. The anterior lobe produces key hormones like growth hormone and ACTH, while the posterior lobe stores and releases oxytocin and vasopressin [S2]. Pituitary tumors are common but often asymptomatic—when they do grow, they can cause hormone imbalances, leading to conditions like Cushing’s syndrome or hyperthyroidism [S4]. In rare cases, tumors like prolactinoma can cause galactorrhea or menstrual disruption [S6].  
+
+[RECAP]  
+The pituitary gland is central to endocrine function—its hormones regulate growth, metabolism, and other glands [S2].  
+
+Sources: [S2], [S4], [S6]

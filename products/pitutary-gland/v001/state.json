@@ -1,0 +1,32 @@
+{
+  "topic": "pitutary gland",
+  "version": 1,
+  "created_at": "2026-09-14T14:34:12Z",
+  "steps": {
+    "preflight": true,
+    "pdfs": {
+      "chunks": 0
+    },
+    "pubmed": {
+      "chunks": 6
+    },
+    "web": {
+      "chunks": 8
+    },
+    "source_snapshot": "8696fba859f2683dcf40854024b87828aa8324d979867a9b2468651a5a4caf0f",
+    "study-guide.md": "4ca0d8bfc7ab465c400da9a56653f79103f0a810dc9e5e24b623c54bcaa8d4c9",
+    "quiz.md": "01fc8f13b824baa42c5b187bdfe2287f216afab1a999770a663e2f2ca9babbb3",
+    "viva.md": "4f8dac46ccda941e5f6e9913b0a8a7fd9e14d405b890a6c8264cd8e43eba83a0",
+    "case-exercises.md": "a40e29d2dd7ed2e8e9d05baf3574c840063741236ac773dfd2a350ea4f0b2ef5",
+    "cheat-sheet.md": "b1805cfe8b751eecf1c3a54e699a64b109550a12dd8fbffded5afdfff3d5ccd6",
+    "mindmap.md": "85ca62d96c0701c982b5dcee54017675fbd43e15b9ed4c7ccafca789d74334ad",
+    "short-script.txt": "54bb33353c46da0315643ddfff0d7ff421ca55f79deff85d93766d72c21a26fe",
+    "explainer-3min.txt": "18dbccc4ac418eb158e21e565e63ce57c0746c2b125673f116413183090fbb4c",
+    "instagram-carousel.md": "c4bb149f7daf4473bc9a229df85c60dc6c36b101be858111840fa24a91f24c33",
+    "product-description.md": "4380782127f84f15e4027075dad2ce5fc6b0ac50cab058d703560f64720c6a79"
+  },
+  "complete": false,
+  "pipeline_version": "2.1.0",
+  "publication_status": "DRAFT_REQUIRES_REVIEW",
+  "chat_model": "qwen3:4b-instruct"
+}

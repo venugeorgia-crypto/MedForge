@@ -1,0 +1,16 @@
+[Opening – Strong and engaging]  
+Acromegaly might sound like a rare condition, but it’s actually a serious endocrine disorder that quietly progresses over years — often going undiagnosed for decades [S1]. And when it finally shows up, it’s not just about big hands or feet. It’s about a cascade of metabolic and cardiovascular problems that can silently threaten a patient’s life [S4].
+
+[Mechanism – Clear and evidence-based]  
+At its core, acromegaly is caused by excessive growth hormone (GH) secretion, most commonly from a pituitary adenoma [S1]. This excess GH drives overproduction of insulin-like growth factor 1 (IGF-1), which fuels abnormal tissue growth and metabolic dysfunction [S4]. The disease is not just about physical changes — it’s about how GH directly interferes with insulin signaling, reducing glucose uptake in tissues and increasing lipolysis [S3].
+
+[Memorable analogy]  
+Think of GH as a traffic controller in the body — when it’s overactive, it doesn’t just let cars (cells) pass; it jams the system, making insulin signals get lost in the chaos. Like a highway with no lanes, glucose can’t move through tissues efficiently — even if a person isn’t overweight, their body just can’t use sugar properly [S3].
+
+[Exam relevance – Direct and practical]  
+On the USMLE or other exams, you’ll see acromegaly tested in clinical vignettes involving insulin resistance, cardiovascular risk, or delayed diagnosis. Remember: diabetes mellitus is common in acromegaly — affecting about one-third of patients — and it’s not due to obesity, but rather to GH-induced insulin resistance, even in lean individuals [S3]. Also, elevated IGF-1 and lack of GH suppression after glucose loading are key diagnostic markers [S4].
+
+[Final recap – Concise and memorable]  
+So, to sum up: acromegaly is a chronic condition from pituitary GH overproduction, leading to elevated IGF-1 and insulin resistance [S1][S4]. It causes metabolic complications like diabetes, increases cardiovascular risk, and is often missed for years [S2][S3]. Diagnosis relies on biochemical tests and MRI to find the tumor [S4]. Treatment starts with surgery, but medical therapies like somatostatin analogs or pegvisomant are used when surgery fails or isn’t possible [S4]. And crucially, mortality rises with older age, longer disease duration, and persistently high GH or IGF-1 levels [S6].  
+
+This makes acromegaly a prime example of how endocrine dysfunction can drive systemic disease — and why early detection and management matter [S1][S4].

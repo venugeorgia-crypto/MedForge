@@ -1,0 +1,38 @@
+{
+  "topic": "Acromegaly",
+  "version": 1,
+  "created_at": "2026-10-04T00:35:09Z",
+  "steps": {
+    "preflight": true,
+    "pdfs": {
+      "chunks": 0
+    },
+    "pubmed": {
+      "chunks": 9
+    },
+    "source_snapshot": "6744f003ab0c0bd5b733b190b8cb675ad396c9db7f249888a8e76d567ebe55aa",
+    "study-guide.md": "918085e3b276e68141363ab6284fbcb19abd3ac0c61e94490ae096d5587d3e1f",
+    "quiz.md": "e6c4561274dccd9eb7660da870d96e6c7264b43cb153299fda8d167ca148fe80",
+    "viva.md": "d42bd880ac01323cc3d1d7d04b31df2875de8fa110e1a6f82d23614c825afe6a",
+    "case-exercises.md": "b1eefce46cc26c361132d11ec16c7604e69c70a32928fe203344b5f2a1f606bb",
+    "cheat-sheet.md": "745e987f9ee2d38842e01c807af2742ee651820f8b2e0671eef5eab6403dd155",
+    "mindmap.md": "45bd169a0931b209eed8264bcd89cf662caaa9af2d7e5660cb1fbf55e4f36040",
+    "short-script.txt": "81ca98e025c04736b5b60d1b8f7fdfa85b92f99687fa89f413667fd345468f71",
+    "explainer-3min.txt": "af323a7cdc8635bbbad2708da75340c8e0158c0eefad921fa4ac41bedee07074",
+    "instagram-carousel.md": "77852ea4132333f65033ba9f115c6267c1cfa6a4d02b2980b38390f07c9a2b2e",
+    "product-description.md": "678abf59d69dcd58c327646d1b269e7773d77a7a30efc112a6ac02fbd67e9c58",
+    "flashcards": {
+      "count": 30
+    },
+    "pdfs_output": true,
+    "evidence_audit": {
+      "cited_lines": 228,
+      "total_lines": 337
+    }
+  },
+  "complete": true,
+  "pipeline_version": "2.1.0",
+  "publication_status": "DRAFT_REQUIRES_REVIEW",
+  "chat_model": "qwen3:4b-instruct",
+  "finished_at": "2026-10-04T01:35:51Z"
+}

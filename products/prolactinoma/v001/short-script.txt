@@ -1,0 +1,8 @@
+[HOOK]  
+Prolactinomas are the most common pituitary adenomas, affecting women most often in their 30s to 40s [S1].  
+
+[BODY]  
+Symptoms include irregular periods and galactorrhea in women, and loss of libido in men [S1]. Elevated prolactin suppresses gonadotropin release, leading to infertility [S5]. Dopamine agonists like cabergoline are first-line treatment, normalizing prolactin in up to 85% of patients and shrinking tumors in up to 80% [S2]. Surgery is an option for small tumors or when medication fails [S2]. In postmenopausal women, prolactinomas often stabilize, and treatment may be reduced or stopped with monitoring [S4].  
+
+[RECAP]  
+Prolactinomas are common, treatable, and often responsive to dopamine agonists [S6].

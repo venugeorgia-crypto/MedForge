@@ -1,0 +1,38 @@
+{
+  "topic": "pituitary gland",
+  "version": 1,
+  "created_at": "2026-10-03T20:34:49Z",
+  "steps": {
+    "preflight": true,
+    "pdfs": {
+      "chunks": 0
+    },
+    "pubmed": {
+      "chunks": 2
+    },
+    "source_snapshot": "fbb031c6a304a78f387a59dc201649d64fdccd6087dcba2ab15c8b53fe3a83ad",
+    "study-guide.md": "419c501f22825071150614fe1d011095fde3ae8b042ff273b2497b82f3694afa",
+    "quiz.md": "0fcdb3ab50c7de926bda6d9b7b628add860fc96eaf1ceb4f8829ea262c2fd28f",
+    "viva.md": "b43171e3e16ecf1e78fb76aac048d042cdc45a3dd2f866a09fee67d3a952c45f",
+    "case-exercises.md": "b497d904deecf4c0ed26606b7c9fdf2f4208ef48b43dababb8717c0febe73009",
+    "cheat-sheet.md": "bc1613272b44684b94fdb0be3b7c33a90b6ec44e0a366a44e75c0d77976feabb",
+    "mindmap.md": "90d6e929694930db40e2b30ce1adc394a0fc7322a5b3b50af79d0c89f21ba47e",
+    "short-script.txt": "982caf649a90df41e515d506c3baa7a62e577223f2cd20a2bc3ad424c980ddba",
+    "explainer-3min.txt": "799b91006e9327039294399e87bc0ba7fcd2a512d678c7e2a8f481a46aff4214",
+    "instagram-carousel.md": "dcc959c9ed2520c1037b738367c3417b3792cdb6d77b45810caf24cfb73d3c0a",
+    "product-description.md": "c9d1dc5674e781d1df3eb5898d09b6cf98e916ed81ae22ed42f5d5a129f06dbe",
+    "flashcards": {
+      "count": 29
+    },
+    "pdfs_output": true,
+    "evidence_audit": {
+      "cited_lines": 143,
+      "total_lines": 385
+    }
+  },
+  "complete": true,
+  "pipeline_version": "2.1.0",
+  "publication_status": "DRAFT_REQUIRES_REVIEW",
+  "chat_model": "qwen3:4b-instruct",
+  "finished_at": "2026-10-03T20:53:48Z"
+}

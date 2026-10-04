@@ -1,0 +1,41 @@
+{
+  "topic": "Prolactinoma",
+  "version": 1,
+  "created_at": "2026-10-04T00:53:42Z",
+  "steps": {
+    "preflight": true,
+    "pdfs": {
+      "chunks": 0
+    },
+    "pubmed": {
+      "chunks": 10
+    },
+    "web": {
+      "chunks": 3
+    },
+    "source_snapshot": "397ed883eb9ee52533c11b2acb28bb8e7ddd76942caed4d7bda2e7581e524101",
+    "study-guide.md": "8e25c92423c098b078ece939642e80dcf3dfcb2b52c77864fe962386e807b038",
+    "quiz.md": "4090ec7ad0606ee80951495a85b1869f3fb6f40ec164722f65ddb941ff5bf0cc",
+    "viva.md": "23c0e9f0a1511cd22d6be0d915b89f67a5c03a772993e19b267b1b06b9fb0cde",
+    "case-exercises.md": "b22cd88eaf7b642d9c6fed9246d7adf2451290b953af03dfeada57e4860f3ecb",
+    "cheat-sheet.md": "2a1fece30090111d76f5a51a376fc8071e38b56a748f32c52cae84aa7dc0ce42",
+    "mindmap.md": "b59023c7ba3e33a44e6548ef9a072290f5230bb261fa51e348b86323513506c4",
+    "short-script.txt": "75baf872e853a1b950cd7d4f182dad60e4befd8b6edfdc76ea72e76db62cd23d",
+    "explainer-3min.txt": "987fff996fbf236a7edca5c24fad0e22cd953e6847b7351e720c1965fab4dd50",
+    "instagram-carousel.md": "d04c6f0f0abc0b7c3d7d38fc28caf828ad769dc013f00b0b4cec121574026f64",
+    "product-description.md": "4150b4f00e44883599c343be16d72114c8ca415494d179140ee071cf005cc880",
+    "flashcards": {
+      "count": 31
+    },
+    "pdfs_output": true,
+    "evidence_audit": {
+      "cited_lines": 248,
+      "total_lines": 359
+    }
+  },
+  "complete": true,
+  "pipeline_version": "2.1.0",
+  "publication_status": "DRAFT_REQUIRES_REVIEW",
+  "chat_model": "qwen3:4b-instruct",
+  "finished_at": "2026-10-04T01:14:01Z"
+}

@@ -1,0 +1,14 @@
+[HOOK]  
+Acromegaly is a rare endocrine disorder caused by excess growth hormone, often from a pituitary adenoma [S1].  
+
+[BODY]  
+It leads to insulin resistance, even in lean patients, increasing diabetes risk—about one-third of patients develop it [S3].  
+This condition is linked to higher cardiovascular risks and mortality [S3].  
+Diagnosis relies on elevated IGF-1 and lack of GH suppression after glucose testing [S4].  
+Pituitary MRI helps identify tumors, and surgery is first-line treatment [S4].  
+For larger tumors or post-op failure, medical therapies like somatostatin ligands or pegvisomant are used [S4].  
+Older patients show delayed diagnosis and higher comorbidity burdens [S5].  
+While cancer links remain debated, long-term GH exposure may increase tumor risk [S6].  
+
+[RECAP]  
+Acromegaly causes metabolic and cardiovascular complications, with early diagnosis and treatment critical [S1].

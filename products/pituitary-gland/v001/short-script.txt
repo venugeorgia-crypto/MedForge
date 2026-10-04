@@ -1,0 +1,10 @@
+[HOOK]  
+Did you know your pituitary gland—just the size of a pea—acts as the body’s master regulator?  
+
+[BODY]  
+It connects to the hypothalamus and controls hormone release for growth and metabolism. The anterior lobe produces five key hormones [S2]. Pituitary tumors are common, with a prevalence of about 75–78 per 100,000 people [S4]. These can cause symptoms like headaches or vision loss, and may lead to disorders like Cushing’s or acromegaly [S3][S4]. Treatment often starts with surgery, especially for hormone-secreting tumors [S4].  
+
+[RECAP]  
+The pituitary is central to endocrine function. Tumors are common and can disrupt hormone balance—early detection via MRI and lab tests is key [S4].  
+
+Sources: [S2], [S3], [S4]

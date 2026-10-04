@@ -1,0 +1,301 @@
+# MedForge V3 Database Schema Documentation
+
+## Overview
+
+The V3 schema extends MedForge from a simple evidence store into a comprehensive medical education platform with:
+
+- **360 ECTS Curriculum Hierarchy** — European medical degree structure
+- **Prerequisite Dependency Graph** — Topic dependencies with weights
+- **Learner Mastery Tracking** — Mastery scores, confidence, attempts
+- **Diagnostic Weaknesses** — Misconceptions, severity, resolution
+- **Interactive Study Sessions** — 5 session types with metrics
+- **Spaced Repetition (SM-2/FSRS)** — Scheduling parameters + review history
+- **Medical Evidence Provenance** — Source tracking with human/animal study flag
+
+### Runtime wiring (MedForge 2.1+)
+
+The learner-facing tables are used by `current/medforge/learner.py`:
+
+- `medforge study <topic>` (and the dashboard STUDY tab) opens an
+  `interactive_sessions` row (`Learn`, `completed_at NULL`) for every mission.
+- `medforge study-log <topic> <score>` / `mf.log_study_result(...)` completes
+  that row in place with the self-score, folds it into `learner_mastery`
+  (running mean; confidence = share of attempts ≥ 70/100), and records
+  `learner_weaknesses` (re-observation escalates severity, never degrades).
+- `medforge mastery` / `mf.learner_snapshot()` aggregates the three tables for
+  the dashboard's STUDY tab and the CLI report.
+- `build_product` imports the flashcards it generates into
+  `spaced_repetition_queue` (`item_type='card'`, `state='new'`, due now). The
+  `item_id` is `"<topic-slug>:<sha256(question)[:16]>"`, so rerunning or
+  rebuilding a pack only adds new questions. `mf.import_flashcards(topic, csv)`
+  does the same on demand, and `medforge import-cards [topic]` schedules every
+  saved pack.
+- `mf.due_items()` / `medforge due` list cards due now (question, answer and
+  source labels are resolved from the pack's `flashcards.csv`; the queue itself
+  stores only scheduling state). Cards of weak topics (mastery < 70 or any
+  unresolved weakness) sort ahead of the rest.
+- `mf.review_card(item_id, grade, scheduler=...)` / `medforge review <item_id>
+  <0-5> [sm2|fsrs]` reschedule a card. Two schedulers share one interface:
+  `sm2` (default) advances 1 day → 6 days → previous interval × ease with the
+  ease floored at 1.30 (the `ease_factor` CHECK); `fsrs` implements FSRS-4.5
+  with the published default parameters and fills `stability`/`difficulty`.
+  Grades below 3 are lapses in both: repetitions reset, the card enters
+  `relearning`, and it returns after `LAPSE_STEP_MINUTES` (10 minutes, the
+  schema's `interval_days REAL` supports sub-day steps).
+- Every review appends to `review_log` (grade, scheduler, before/after
+  interval/ease/state). `mf.review_analytics()` / `medforge due` compute
+  30-day retention, day streaks, per-day review counts, and leeches (cards
+  with ≥ 3 lapses) from it.
+- Lapses of graduated cards record `learner_weaknesses` (concept = card
+  question, misconception "Lapsed during flashcard review"); a card that
+  graduates back to `review` resolves the matching weakness. The dashboard
+  REVIEW tab renders the flashcard session, due list, analytics, and leeches
+  via `mf.spaced_repetition_snapshot()`.
+- `ensure_v3_tables()` applies `V3_SCHEMA_DDL` idempotently on every call, so a
+  legacy V2 database self-heals without an explicit migration.
+
+Topics are stored as slugs (`slugify(topic)`); the `topic_id` columns are
+free-form text, so curriculum-node IDs can be adopted later without a schema
+change.
+
+---
+
+## Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    CURRICULUM_NODES ||--o{ CURRICULUM_NODES : "parent_id"
+    CURRICULUM_NODES ||--o{ PREREQUISITES : "topic_id"
+    CURRICULUM_NODES ||--o{ PREREQUISITES : "prerequisite_id"
+    CURRICULUM_NODES ||--|| LEARNER_MASTERY : "topic_id"
+    CURRICULUM_NODES ||--o{ LEARNER_WEAKNESSES : "topic_id"
+    CURRICULUM_NODES ||--o{ INTERACTIVE_SESSIONS : "topic_id"
+    CURRICULUM_NODES ||--o{ SPACED_REPETITION_QUEUE : "item_id (topic)"
+    SPACED_REPETITION_QUEUE ||--o{ REVIEW_LOG : "item_id"
+    MEDICAL_SOURCES ||--o{ CURRICULUM_NODES : "evidence reference"
+```
+
+---
+
+## Tables
+
+### 1. `curriculum_nodes` — 360 ECTS Hierarchy
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | TEXT | PRIMARY KEY | Unique identifier (e.g., `Y1`, `Y1S1`, `MED101`, `CVS-MOD`) |
+| `parent_id` | TEXT | FK → curriculum_nodes(id) ON DELETE SET NULL | Parent in hierarchy |
+| `node_type` | TEXT | CHECK IN ('Year','Semester','Course','Module','Topic','Subtopic','Learning Objective') | Hierarchy level |
+| `code` | TEXT | DEFAULT '' | Short code (e.g., `MED101`, `CVS-TOP-01`) |
+| `title` | TEXT | NOT NULL | Display title |
+| `description` | TEXT | DEFAULT '' | Detailed description |
+| `year` | INTEGER | CHECK (1-6) | Academic year (1-6) |
+| `semester` | INTEGER | CHECK (1-12) | Semester number (1-12) |
+| `ects_weight` | REAL | ≥ 0, DEFAULT 0 | ECTS credits |
+| `order_index` | INTEGER | DEFAULT 0 | Sort order within parent |
+| `created_at` | TEXT | NOT NULL | ISO timestamp |
+| `updated_at` | TEXT | NOT NULL | ISO timestamp |
+
+**Indexes:** `idx_curriculum_parent`, `idx_curriculum_type`, `idx_curriculum_year_sem`
+
+---
+
+### 2. `prerequisites` — Topic Dependency Graph
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Surrogate key |
+| `topic_id` | TEXT | FK → curriculum_nodes(id) ON DELETE CASCADE | Dependent topic |
+| `prerequisite_id` | TEXT | FK → curriculum_nodes(id) ON DELETE CASCADE | Required topic |
+| `dependency_weight` | REAL | CHECK (0.0-1.0), DEFAULT 1.0 | Strength of dependency |
+| `relationship_type` | TEXT | CHECK IN ('strict','recommended','co-requisite'), DEFAULT 'strict' | Dependency type |
+| `created_at` | TEXT | NOT NULL | ISO timestamp |
+
+**Unique:** `(topic_id, prerequisite_id)`
+**Indexes:** `idx_prereq_topic`, `idx_prereq_prerequisite`
+
+---
+
+### 3. `learner_mastery` — Mastery Tracking
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Surrogate key |
+| `topic_id` | TEXT | UNIQUE, FK → curriculum_nodes(id) | Topic reference |
+| `mastery_score` | REAL | CHECK (0-100), DEFAULT 0 | Mastery percentage |
+| `confidence_score` | REAL | CHECK (0-100), DEFAULT 0 | Confidence percentage |
+| `total_attempts` | INTEGER | ≥ 0, DEFAULT 0 | Total practice attempts |
+| `successful_attempts` | INTEGER | ≥ 0, DEFAULT 0 | Successful attempts |
+| `last_attempt_at` | TEXT | NULLABLE | Last attempt timestamp |
+| `created_at` | TEXT | NOT NULL | ISO timestamp |
+| `updated_at` | TEXT | NOT NULL | ISO timestamp |
+
+**Indexes:** `idx_mastery_topic`, `idx_mastery_score`
+
+---
+
+### 4. `learner_weaknesses` — Diagnostic Misconceptions
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Surrogate key |
+| `topic_id` | TEXT | FK → curriculum_nodes(id) | Related topic |
+| `concept` | TEXT | NOT NULL | Specific concept |
+| `misconception` | TEXT | NOT NULL | Description of misconception |
+| `error_count` | INTEGER | ≥ 1, DEFAULT 1 | Times observed |
+| `severity` | TEXT | CHECK IN ('low','medium','high','critical'), DEFAULT 'medium' | Severity level |
+| `is_resolved` | INTEGER | CHECK (0,1), DEFAULT 0 | Resolution status |
+| `resolved_at` | TEXT | NULLABLE | Resolution timestamp |
+| `first_observed_at` | TEXT | NOT NULL | First observation |
+| `last_observed_at` | TEXT | NOT NULL | Last observation |
+
+**Indexes:** `idx_weakness_topic`, `idx_weakness_status`
+
+---
+
+### 5. `interactive_sessions` — Study Session Log
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Surrogate key |
+| `session_type` | TEXT | CHECK IN ('Learn','Active Recall','Case','Viva','Prerequisite Repair') | Session type |
+| `topic_id` | TEXT | FK → curriculum_nodes(id) | Topic studied |
+| `score` | REAL | CHECK (0-100), DEFAULT 0 | Session score |
+| `duration_seconds` | INTEGER | ≥ 0, DEFAULT 0 | Duration |
+| `metrics` | TEXT | DEFAULT '{}' | JSON metrics |
+| `notes` | TEXT | DEFAULT '' | Free-form notes |
+| `created_at` | TEXT | NOT NULL | ISO timestamp |
+| `completed_at` | TEXT | NULLABLE | Completion timestamp |
+
+**Indexes:** `idx_sessions_type`, `idx_sessions_topic`, `idx_sessions_created`
+
+---
+
+### 6. `spaced_repetition_queue` — SM-2/FSRS Scheduling
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Surrogate key |
+| `item_type` | TEXT | CHECK IN ('card','topic','concept'), DEFAULT 'card' | Item type |
+| `item_id` | TEXT | NOT NULL | Reference ID |
+| `repetition_count` | INTEGER | ≥ 0, DEFAULT 0 | Number of reviews |
+| `interval_days` | REAL | ≥ 0, DEFAULT 0 | Current interval |
+| `ease_factor` | REAL | ≥ 1.30, DEFAULT 2.50 | SM-2 ease factor |
+| `stability` | REAL | ≥ 0, DEFAULT 0 | FSRS stability |
+| `difficulty` | REAL | CHECK (0-10), DEFAULT 0 | FSRS difficulty |
+| `due_date` | TEXT | NOT NULL | Next review due |
+| `last_reviewed_at` | TEXT | NULLABLE | Last review |
+| `last_grade` | INTEGER | CHECK (0-5), NULLABLE | Last grade (0-5) |
+| `state` | TEXT | CHECK IN ('new','learning','review','relearning'), DEFAULT 'new' | FSRS state |
+| `created_at` | TEXT | NOT NULL | ISO timestamp |
+| `updated_at` | TEXT | NOT NULL | ISO timestamp |
+
+**Unique:** `(item_type, item_id)`
+**Indexes:** `idx_sr_due_date`, `idx_sr_state`, `idx_sr_item`
+
+---
+
+### 6b. `review_log` — Spaced Repetition Review History
+
+Append-only log of every review; the queue keeps only the latest state.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Surrogate key |
+| `item_type` | TEXT | CHECK IN ('card','topic','concept'), DEFAULT 'card' | Item type |
+| `item_id` | TEXT | NOT NULL | Queue reference |
+| `grade` | INTEGER | CHECK (0-5) | Grade given |
+| `scheduler` | TEXT | DEFAULT 'sm2' | `sm2` or `fsrs` |
+| `interval_before` | REAL | ≥ 0 | Interval before review |
+| `interval_after` | REAL | ≥ 0 | Interval after review |
+| `ease_before` | REAL | ≥ 1.30 | Ease before review |
+| `ease_after` | REAL | ≥ 1.30 | Ease after review |
+| `state_before` | TEXT | CHECK IN queue states | State before review |
+| `state_after` | TEXT | CHECK IN queue states | State after review |
+| `reviewed_at` | TEXT | NOT NULL | ISO timestamp |
+
+**Indexes:** `idx_review_log_item`, `idx_review_log_time`
+
+---
+
+### 7. `medical_sources` — Evidence Provenance
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | TEXT | PRIMARY KEY | Unique identifier |
+| `title` | TEXT | NOT NULL | Publication title |
+| `authors` | TEXT | DEFAULT '' | Author list |
+| `publication_type` | TEXT | CHECK IN ('Guideline','Textbook','Meta-Analysis','Research','Educational') | Type |
+| `is_human_study` | INTEGER | CHECK (0,1), DEFAULT 1 | Human vs animal |
+| `study_design` | TEXT | DEFAULT '' | Study design |
+| `journal_or_publisher` | TEXT | DEFAULT '' | Journal/publisher |
+| `publication_year` | INTEGER | NULLABLE | Year |
+| `pmid` | TEXT | DEFAULT '' | PubMed ID |
+| `doi` | TEXT | DEFAULT '' | DOI |
+| `url` | TEXT | DEFAULT '' | URL |
+| `evidence_level` | TEXT | DEFAULT '' | Evidence grade |
+| `trust_score` | REAL | CHECK (0-1), DEFAULT 0.8 | Trust weight |
+| `raw_metadata` | TEXT | DEFAULT '{}' | JSON metadata |
+| `created_at` | TEXT | NOT NULL | ISO timestamp |
+| `updated_at` | TEXT | NOT NULL | ISO timestamp |
+
+**Indexes:** `idx_sources_type`, `idx_sources_human`, `idx_sources_pmid`, `idx_sources_doi`
+
+---
+
+### 8. `schema_migrations` — Migration History
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `version` | TEXT | PRIMARY KEY | Schema version |
+| `name` | TEXT | NOT NULL | Migration name |
+| `applied_at` | TEXT | NOT NULL | Application timestamp |
+
+---
+
+## Migration
+
+Run V3 migration explicitly:
+
+```bash
+python -m medforge_core migrate
+```
+
+Or programmatically:
+
+```python
+from medforge.storage import migrate_database
+result = migrate_database()
+```
+
+**Features:**
+- Non-destructive (preserves V2 tables: `chunks`, `study_sessions`, `weaknesses`)
+- Verified SQLite backup via backup API
+- Integrity checks before and after
+- Idempotent (safe to re-run)
+- Rollback support via `rollback_migration()`
+
+---
+
+## Enum Reference
+
+### `NODE_TYPES`
+`('Year', 'Semester', 'Course', 'Module', 'Topic', 'Subtopic', 'Learning Objective')`
+
+### `PREREQUISITE_TYPES`
+`('strict', 'recommended', 'co-requisite')`
+
+### `WEAKNESS_SEVERITY`
+`('low', 'medium', 'high', 'critical')`
+
+### `SESSION_TYPES`
+`('Learn', 'Active Recall', 'Case', 'Viva', 'Prerequisite Repair')`
+
+### `SPACED_REPETITION_STATES`
+`('new', 'learning', 'review', 'relearning')`
+
+### `SPACED_REPETITION_ITEM_TYPES`
+`('card', 'topic', 'concept')`
+
+### `MEDICAL_PUBLICATION_TYPES`
+`('Guideline', 'Textbook', 'Meta-Analysis', 'Research', 'Educational')`

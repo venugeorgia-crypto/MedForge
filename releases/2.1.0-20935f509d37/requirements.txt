@@ -1,0 +1,10 @@
+requests>=2.32,<3
+chromadb>=1,<2
+pypdf>=5,<7
+reportlab>=4,<5
+pillow>=11,<13
+streamlit>=1.45,<2
+ddgs>=9,<10
+trafilatura>=2,<3
+genanki>=0.13,<0.14
+psutil>=6,<8

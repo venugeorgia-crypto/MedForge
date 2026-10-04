@@ -1,0 +1,36 @@
+- Hypothalamic-pituitary axis  
+  - Core components: hypothalamus, pituitary gland, and target endocrine glands  
+    - The hypothalamus regulates pituitary hormone release via neurohormones [S2]  
+    - The pituitary gland mediates hormonal output to peripheral organs [S2]  
+  - Key axes:  
+    - Hypothalamic-pituitary-ovarian (HPO) axis  
+      - Regulates female reproduction via gonadotropin-releasing hormone (GnRH) surge [S1]  
+      - GnRH neurons in the hypothalamus receive metabolic signals from circulation and adjacent neurons [S1]  
+      - Leptin acts indirectly on GnRH via POMC, NPY/AgRP, and nNOS neurons [S1]  
+      - Hypothalamic inflammation contributes to ovulatory disorders independently of obesity [S1]  
+    - Hypothalamic-pituitary-adrenal (HPA) axis  
+      - Mediates stress response through corticotropin-releasing hormone (CRH), adrenocorticotropic hormone (ACTH), and glucocorticoids [S3]  
+      - Dysregulation of the HPA axis is linked to mental and physical disorders [S3]  
+      - Females show more rapid and robust HPA axis activation than males in preclinical models [S3]  
+      - Human studies show inconsistent findings due to stressor variability, contraceptives, and menstrual cycle phase [S3]  
+    - Hypothalamic-pituitary-gonadal (HPG) axis  
+      - Regulates male reproductive function via testosterone and gonadotropin release [S4]  
+      - Testosterone levels show a positive association with aggression [S4]  
+      - Androgen receptors in brain neural circuits modulate aggressive behavior [S4]  
+  - Interactions between axes  
+    - Chronic stress dysregulates the HPA axis, altering cortisol levels and potentially contributing to aggression [S4]  
+    - HPA and HPG axes interact in regulating behavior, including aggression [S4]  
+  - Clinical implications  
+    - HPO axis dysfunction leads to ovulatory disorders classified by WHO into three groups:  
+      - Group I: hypothalamic failure (hypogonadotropic hypogonadism) [S2]  
+      - Group II: eugonadal state with diverse endocrinopathies [S2]  
+      - Group III: hypergonadotropic hypogonadism due to ovarian dysfunction [S2]  
+    - HPA axis dysfunction is associated with epilepsy, where stress triggers seizures and comorbidities [S5]  
+    - Early life stress (ELS) induces persistent HPA axis dysregulation, increasing risk for adult mental health disorders [S6]  
+    - HPA axis responses reflect allostatic load; acute responses are adaptive, but prolonged activation causes pathology [S6]  
+  - Exam-relevant links  
+    - GnRH surge is essential for ovulation initiation [S1]  
+    - Leptin signaling via POMC/NPY/AgRP neurons modulates GnRH activity [S1]  
+    - Sex differences in HPA axis response may explain higher prevalence of stress-related disorders in women [S3]  
+    - Chronic stress and early life stress both lead to long-term HPA axis dysfunction [S3, S6]  
+    - HPA axis dysregulation is implicated in both epilepsy and aggression [S4, S5]

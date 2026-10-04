@@ -1,0 +1,38 @@
+{
+  "topic": "Hypothalamic-pituitary axis",
+  "version": 1,
+  "created_at": "2026-10-04T01:14:01Z",
+  "steps": {
+    "preflight": true,
+    "pdfs": {
+      "chunks": 0
+    },
+    "pubmed": {
+      "chunks": 9
+    },
+    "source_snapshot": "125f08229866e1d3fa0dac6da2970340d2b6a877d70f494fda3a912cffeb612a",
+    "study-guide.md": "ed23da5107824eb0e0c6c0a31d71c6fba5c2fa0489dde69b204371524267e468",
+    "quiz.md": "4fba603cf11423c5644f42a2f7b14c6c4bd69b80c00166e9bf7bae30c9059dd5",
+    "viva.md": "471903e8125c209289323964c79f5c0f948649cfd480ba20e7fec1b521bcc53c",
+    "case-exercises.md": "579a7534d7bf0e45b8ba54b1e82c3dd1ded84ceb71dccb7706cf26094610ec8e",
+    "cheat-sheet.md": "7e9796ac3f72d79ea143ad44d3783316aa1f291797b6764ebad536107209decd",
+    "mindmap.md": "e6b1ee2add81cd22007e0264d65e0b607dd8f5b7afaffb059bdb8f3e727d0913",
+    "short-script.txt": "defb7132cacfd1551c4fc510ddf25e9147f2f26ad4d16c6fa7c6bd6ee3a50061",
+    "explainer-3min.txt": "f5574e92a5955c113a67d314859f2cb9234545cece62607a265e6d00306cb236",
+    "instagram-carousel.md": "a1896e1dc56e37998089640608fedc41b810956cf9ac8f0cd77d6b9a570e81e6",
+    "product-description.md": "1ea8a5aefc0f40997b5309bc20fe1a91ff662fce25901a127de26454575ee58e",
+    "flashcards": {
+      "count": 29
+    },
+    "pdfs_output": true,
+    "evidence_audit": {
+      "cited_lines": 215,
+      "total_lines": 341
+    }
+  },
+  "complete": true,
+  "pipeline_version": "2.1.0",
+  "publication_status": "DRAFT_REQUIRES_REVIEW",
+  "chat_model": "qwen3:4b-instruct",
+  "finished_at": "2026-10-04T01:28:28Z"
+}
