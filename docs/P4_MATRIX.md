@@ -148,6 +148,15 @@ inspectable, not infallible.
     downward, never silently upgraded).
   - "Prolactinoma incidence is highest in men over 70 years of age." →
     UNSUPPORTED (0.0), `needs_review`.
+  - "Prolactinomas comprise nearly 40 percent of all pituitary tumours." →
+    PARTIALLY_SUPPORTED (1.0) — one candidate explicitly states "nearly 40%"
+    (SUPPORTED pair), a second does not address prevalence; the mix aggregates
+    downward instead of silently upgrading.
+  - "Prolactinomas are more common in men than in women." → UNSUPPORTED (0.0),
+    `needs_review` — neither candidate addresses sex prevalence, and the
+    verifier says so rather than guessing (no keyword-overlap verdicts).
+  Final live state: 5 claims · 18 evidence records · 10 relationships ·
+  10 verification runs (2 needs_review).
 - **CLI:** `claims`, `claim-info`, `evidence-status` verified on the live DB;
   `verify-pack` verified end-to-end in an isolated `MEDFORGE_HOME=/tmp/mf-p4-cli`
   (fresh DB self-healed to 6.0.0, one claim × two PubMed candidates, real model,
