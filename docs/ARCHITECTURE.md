@@ -102,6 +102,27 @@
   and writes an excerpt-free `evidence-graph.json`
 - See `docs/EVIDENCE.md`
 
+### 5b. `medforge/learner_model.py` — Recency-Weighted Learner Model (V7)
+- **Evidence**: append-only `learning_attempts` (topic slug, item type/id,
+  timestamps, score, correctness, learner confidence, response time, source,
+  content version, optional session/curriculum links)
+- **Estimate**: materialized `learner_model_state` per topic — exponential decay
+  (`half-life 21 d`) over all attempts, shrunk toward a 0.5 prior, with
+  recent/historical split, consistency, ESS-based uncertainty and evidence
+  count; versioned `p6-rwm-v1`
+- **Confidence**: tracked separately from mastery; signed calibration gap and
+  over/under-confident direction, `None` when no confidence was reported
+- **Weaknesses**: deterministic detector over the estimates — known vs
+  possible/low-confidence, severity from the estimate, prerequisite impact, and
+  auto-recovery of model-created rows (manual/review rows are never touched)
+- **Priority**: deterministic weighted signal (weakness, uncertainty, overdue,
+  recent failure, prerequisite impact) with every component exposed
+- **Reproducibility**: pure recalculation from stored attempts; a rebuild at the
+  stored evaluation time must equal the materialized row (`matches_stored`)
+- **Surfaces**: `learner`/`mastery`/`weaknesses`/`history`/`recalculate`/
+  `study-priority` CLI + the dashboard LEARNER tab
+- See `docs/LEARNER_MODEL.md`
+
 ### 6. `medforge/ingestion.py` — Evidence Acquisition
 - **PDFs**: `pypdf` extraction, SHA-256 change detection, incremental re-index
 - **PubMed**: NCBI E-utilities (esearch + efetch), XML parsing
@@ -276,6 +297,19 @@ USER TOPIC
 - New tables created by migration
 - Wire into product pipeline via `curriculum_nodes` lookup
 - Add mastery/weakness tracking to study sessions
+
+### Learner Model Integration (P6, V7)
+- `learning_attempts` is append-only evidence; add new evidence sources by
+  calling `record_learning_event(...)` (validate `item_type`/`source` against
+  `T.LEARNING_ATTEMPT_*`) — no schema change needed for a new question source
+- `learner_model_state` is materialized; never write it directly — always go
+  through `record_learning_event` / `recalculate_mastery` so decay stays
+  reproducible
+- Changing decay, prior, thresholds or priority weights requires a new
+  `LEARNER_MODEL_VERSION` and a recalculation pass
+- P7/P8 consume the read API only: `get_mastery`, `get_weaknesses`,
+  `get_recent_performance`, `get_confidence`, `get_prerequisite_risks`,
+  `get_review_priority`
 
 ---
 

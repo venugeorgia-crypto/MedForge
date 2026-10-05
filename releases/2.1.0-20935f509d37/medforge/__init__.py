@@ -58,9 +58,17 @@ from medforge.storage import (
 )
 from medforge.learner import (
     ensure_v3_tables, start_session, record_session, update_mastery,
-    record_weakness, resolve_weakness, log_study_result, learner_snapshot,
+    record_weakness, resolve_weakness, log_study_result, complete_session,
+    learner_snapshot, normalize_score,
     card_item_id, import_flashcards, due_items, review_card, review_analytics,
     spaced_repetition_snapshot, SCHEDULERS, DEFAULT_SCHEDULER,
+)
+from medforge.learner_model import (
+    ensure_learner_model_tables, decay_weight, compute_model_state,
+    record_learning_event, recalculate_mastery, recalculate_all, get_mastery,
+    get_confidence, get_recent_performance, get_weaknesses,
+    get_prerequisite_risks, get_review_priority, study_priority,
+    detect_weaknesses, learner_history, learner_summary, curriculum_report,
 )
 from medforge.retrieval import (
     hybrid_retrieve, source_pack, keyword_results, vector_results,
@@ -122,7 +130,14 @@ __all__ = [
     # spaced repetition (V3 queue)
     "card_item_id", "import_flashcards", "due_items", "review_card",
     "review_analytics", "spaced_repetition_snapshot", "SCHEDULERS",
-    "DEFAULT_SCHEDULER",
+    "DEFAULT_SCHEDULER", "complete_session", "normalize_score",
+    # recency-weighted learner model (V7/P6)
+    "ensure_learner_model_tables", "decay_weight", "compute_model_state",
+    "record_learning_event", "recalculate_mastery", "recalculate_all",
+    "get_mastery", "get_confidence", "get_recent_performance", "get_weaknesses",
+    "get_prerequisite_risks", "get_review_priority", "study_priority",
+    "detect_weaknesses", "learner_history", "learner_summary",
+    "curriculum_report",
     # retrieval
     "hybrid_retrieve", "source_pack", "keyword_results", "vector_results",
     # generation

@@ -54,7 +54,8 @@ __all__ = [
     "PASS_SCORE", "SM2_MIN_EASE", "DEFAULT_EASE", "SM2_PASS_GRADE",
     "SCHEDULERS", "DEFAULT_SCHEDULER", "LAPSE_STEP_MINUTES", "LEECH_THRESHOLD",
     "ensure_v3_tables", "start_session", "record_session", "update_mastery",
-    "record_weakness", "resolve_weakness", "log_study_result", "learner_snapshot",
+    "record_weakness", "resolve_weakness", "log_study_result", "complete_session",
+    "learner_snapshot", "normalize_score",
     "card_item_id", "import_flashcards", "due_items", "review_card",
     "review_analytics", "spaced_repetition_snapshot",
 ]
@@ -115,6 +116,26 @@ def _normalize_score(score: float) -> float:
 
 def _row_dict(row: Optional[sqlite3.Row]) -> Optional[Dict[str, Any]]:
     return None if row is None else {k: row[k] for k in row.keys()}
+
+
+def normalize_score(score: float) -> float:
+    """Public alias: 0-10 rubric or raw 0-100 score → rounded 0-100."""
+    return _normalize_score(score)
+
+
+def _record_attempt(topic_id: str, score_percent: float, session_id: Optional[int] = None,
+                    source: str = "session", item_type: str = "session",
+                    item_id: str = "", correct: Optional[bool] = None,
+                    answered_at: Optional[str] = None,
+                    confidence: Optional[float] = None) -> Dict[str, Any]:
+    """Bridge to the P6 learner model; failures never break the legacy flow."""
+    from medforge.learner_model import record_learning_event
+
+    return record_learning_event(
+        topic_id, score=score_percent, session_id=session_id, source=source,
+        item_type=item_type, item_id=item_id, correct=correct,
+        answered_at=answered_at, confidence=confidence, mastery_key=topic_id,
+    )
 
 def start_session(topic: str, session_type: str = "Learn", notes: str = "") -> Dict[str, Any]:
     """Open a new (not yet completed) interactive session for a topic."""
@@ -179,6 +200,12 @@ def record_session(
         con.close()
     if s is not None:
         result["mastery"] = update_mastery(tid, s)
+        try:
+            result["learner_model"] = _record_attempt(
+                tid, s, session_id=result["session_id"], source="session",
+            )["state"]
+        except Exception as e:
+            result["learner_model_error"] = str(e)
     return result
 
 
@@ -305,14 +332,17 @@ def log_study_result(
     duration_seconds: int = 0,
     notes: str = "",
     weaknesses: Optional[List[Dict[str, Any]]] = None,
+    session_id: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Log a finished study session: close any open session, score it,
-    update mastery, and record reported weaknesses.
+    """Log a finished study session: close one session, score it, update
+    mastery, record reported weaknesses and a P6 learning attempt.
 
-    The score may use the 0-10 mission rubric or a raw 0-100 value. If an open
-    session exists for the topic (created by start_session/study()), it is
-    completed in place with the score and measured duration; otherwise a new
-    completed session row is inserted.
+    The score may use the 0-10 mission rubric or a raw 0-100 value. Pass an
+    explicit ``session_id`` to complete exactly that session (validated: it
+    must exist, belong to this topic and still be open) — this is the safe path
+    and cannot close another open session. Without ``session_id`` the legacy
+    default applies: the topic's newest open session (if any) is completed in
+    place; otherwise a new completed row is inserted.
     """
     if session_type is not None and session_type not in T.SESSION_TYPES:
         raise ValueError(f"session_type must be one of {T.SESSION_TYPES}, got {session_type!r}.")
@@ -322,11 +352,28 @@ def log_study_result(
     ensure_v3_tables()
     con = _connect()
     try:
-        row = con.execute(
-            "SELECT id, session_type, created_at FROM interactive_sessions"
-            " WHERE topic_id=? AND completed_at IS NULL ORDER BY id DESC LIMIT 1",
-            (tid,),
-        ).fetchone()
+        if session_id is not None:
+            row = con.execute(
+                "SELECT id, session_type, created_at, topic_id, completed_at"
+                " FROM interactive_sessions WHERE id=?",
+                (int(session_id),),
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"Unknown session_id: {session_id!r}.")
+            if row["topic_id"] != tid:
+                raise ValueError(
+                    f"Session {session_id} belongs to topic {row['topic_id']!r},"
+                    f" not {tid!r}."
+                )
+            if row["completed_at"] is not None:
+                raise ValueError(f"Session {session_id} is already completed.")
+        else:
+            # Legacy default (kept for compatibility): the newest open session.
+            row = con.execute(
+                "SELECT id, session_type, created_at FROM interactive_sessions"
+                " WHERE topic_id=? AND completed_at IS NULL ORDER BY id DESC LIMIT 1",
+                (tid,),
+            ).fetchone()
         if row is not None:
             stype = session_type or row["session_type"]
             duration = int(duration_seconds or 0)
@@ -341,7 +388,7 @@ def log_study_result(
                    duration_seconds=?, notes=?, completed_at=? WHERE id=?""",
                 (stype, s, duration, notes, now, row["id"]),
             )
-            session_id = row["id"]
+            completed_id = row["id"]
         else:
             stype = session_type or "Active Recall"
             cur = con.execute(
@@ -350,7 +397,7 @@ def log_study_result(
                    VALUES(?,?,?,?,?,?,?,?)""",
                 (stype, tid, s, max(0, int(duration_seconds or 0)), "{}", notes, now, now),
             )
-            session_id = cur.lastrowid
+            completed_id = cur.lastrowid
         con.commit()
     finally:
         con.close()
@@ -361,10 +408,46 @@ def log_study_result(
             tid, w.get("concept", ""), w.get("misconception", ""),
             w.get("severity", "medium"),
         ))
-    return {
-        "session_id": session_id, "topic_id": tid, "session_type": stype,
+    result: Dict[str, Any] = {
+        "session_id": completed_id, "topic_id": tid, "session_type": stype,
         "score": s, "mastery": mastery, "weaknesses": recorded,
     }
+    try:
+        result["learner_model"] = _record_attempt(
+            tid, s, session_id=completed_id, source="session",
+        )["state"]
+    except Exception as e:
+        result["learner_model_error"] = str(e)
+    return result
+
+
+def complete_session(
+    session_id: int,
+    score: float,
+    session_type: Optional[str] = None,
+    duration_seconds: int = 0,
+    notes: str = "",
+    weaknesses: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Complete exactly one session by id (never another topic's open session)."""
+    ensure_v3_tables()
+    con = _connect()
+    try:
+        row = con.execute(
+            "SELECT id, topic_id, session_type, completed_at FROM interactive_sessions"
+            " WHERE id=?", (int(session_id),),
+        ).fetchone()
+    finally:
+        con.close()
+    if row is None:
+        raise ValueError(f"Unknown session_id: {session_id!r}.")
+    if row["completed_at"] is not None:
+        raise ValueError(f"Session {session_id} is already completed.")
+    return log_study_result(
+        row["topic_id"], score, session_type=session_type or row["session_type"],
+        duration_seconds=duration_seconds, notes=notes, weaknesses=weaknesses,
+        session_id=int(session_id),
+    )
 
 
 def learner_snapshot(
@@ -409,6 +492,12 @@ def learner_snapshot(
         ).fetchone()[0]
     finally:
         con.close()
+    try:
+        from medforge.learner_model import learner_summary
+
+        model_summary: Dict[str, Any] = learner_summary()
+    except Exception as e:  # the legacy snapshot must never break
+        model_summary = {"error": str(e)}
     return {
         "summary": {
             "topics_studied": len(mastery),
@@ -422,6 +511,7 @@ def learner_snapshot(
         "mastery": mastery,
         "weaknesses": unresolved,
         "recent_sessions": sessions,
+        "model": model_summary,
     }
 
 
@@ -812,6 +902,15 @@ def review_card(
             updated["weakness_recorded"] = True
         else:
             updated["weakness_resolved"] = _resolve_weakness_concept(topic_id, concept) > 0
+    # P6: every review is learner evidence; scheduling above stays independent.
+    try:
+        updated["learner_model"] = _record_attempt(
+            topic_id, q * 20.0, source="review", item_type="card",
+            item_id=(item_id or "").split(":", 1)[-1],
+            correct=(q >= SM2_PASS_GRADE), answered_at=now_str,
+        )["state"]
+    except Exception as e:
+        updated["learner_model_error"] = str(e)
     return updated
 
 

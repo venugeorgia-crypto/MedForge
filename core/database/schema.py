@@ -316,6 +316,84 @@ CREATE INDEX IF NOT EXISTS idx_verification_claim ON verification_runs(claim_id)
 CREATE INDEX IF NOT EXISTS idx_verification_time ON verification_runs(created_at);
 """
 
+# ─── V7: recency-weighted learner model (P6) ───
+# Append-only performance events + a materialized, versioned learner state.
+# The legacy learner_mastery table keeps its incremental-mean semantics as a
+# compatibility surface; the recency-weighted estimate lives here.
+LEARNING_ATTEMPT_ITEM_TYPES = ("session", "card", "question", "concept", "topic", "manual")
+LEARNING_ATTEMPT_SOURCES = ("session", "review", "manual", "backfill")
+LEARNER_WEAKNESS_ORIGINS = ("manual", "review", "learner_model")
+
+_ATTEMPT_ITEM_SQL = ", ".join(f"'{v}'" for v in LEARNING_ATTEMPT_ITEM_TYPES)
+_ATTEMPT_SOURCE_SQL = ", ".join(f"'{v}'" for v in LEARNING_ATTEMPT_SOURCES)
+
+V7_SCHEMA_DDL = f"""
+-- 1. Learning attempts / performance events (append-only evidence)
+CREATE TABLE IF NOT EXISTS learning_attempts (
+    attempt_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NULL REFERENCES interactive_sessions(id) ON DELETE SET NULL,
+    curriculum_node_id TEXT NULL REFERENCES curriculum_nodes(id) ON DELETE SET NULL,
+    mastery_key TEXT NOT NULL,
+    item_type TEXT NOT NULL DEFAULT 'session' CHECK(item_type IN ({_ATTEMPT_ITEM_SQL})),
+    item_id TEXT DEFAULT '',
+    presented_at TEXT NULL,
+    answered_at TEXT NOT NULL,
+    score REAL NOT NULL CHECK(score >= 0.0 AND score <= 1.0),
+    correct INTEGER NULL CHECK(correct IS NULL OR correct IN (0, 1)),
+    learner_confidence REAL NULL CHECK(learner_confidence IS NULL OR (learner_confidence >= 0.0 AND learner_confidence <= 1.0)),
+    response_time_seconds REAL NULL CHECK(response_time_seconds IS NULL OR response_time_seconds >= 0.0),
+    source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ({_ATTEMPT_SOURCE_SQL})),
+    content_version TEXT DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_attempts_key ON learning_attempts(mastery_key, answered_at);
+CREATE INDEX IF NOT EXISTS idx_attempts_time ON learning_attempts(answered_at);
+CREATE INDEX IF NOT EXISTS idx_attempts_session ON learning_attempts(session_id);
+CREATE INDEX IF NOT EXISTS idx_attempts_item ON learning_attempts(item_type, item_id);
+
+-- 2. Materialized current learner state (one row per mastery key)
+CREATE TABLE IF NOT EXISTS learner_model_state (
+    mastery_key TEXT PRIMARY KEY,
+    curriculum_node_id TEXT NULL REFERENCES curriculum_nodes(id) ON DELETE SET NULL,
+    model_version TEXT NOT NULL,
+    half_life_days REAL NOT NULL DEFAULT 21.0 CHECK(half_life_days > 0.0),
+    mastery_score REAL NOT NULL CHECK(mastery_score >= 0.0 AND mastery_score <= 1.0),
+    weighted_evidence REAL NOT NULL DEFAULT 0.0 CHECK(weighted_evidence >= 0.0),
+    evidence_count INTEGER NOT NULL DEFAULT 0 CHECK(evidence_count >= 0),
+    recent_performance REAL NULL CHECK(recent_performance IS NULL OR (recent_performance >= 0.0 AND recent_performance <= 1.0)),
+    historical_performance REAL NULL CHECK(historical_performance IS NULL OR (historical_performance >= 0.0 AND historical_performance <= 1.0)),
+    consistency REAL NULL CHECK(consistency IS NULL OR (consistency >= 0.0 AND consistency <= 1.0)),
+    uncertainty REAL NOT NULL DEFAULT 1.0 CHECK(uncertainty >= 0.0 AND uncertainty <= 1.0),
+    confidence_estimate REAL NULL CHECK(confidence_estimate IS NULL OR (confidence_estimate >= 0.0 AND confidence_estimate <= 1.0)),
+    confidence_calibration REAL NULL CHECK(confidence_calibration IS NULL OR (confidence_calibration >= -1.0 AND confidence_calibration <= 1.0)),
+    last_attempt_at TEXT NULL,
+    last_success_at TEXT NULL,
+    last_failure_at TEXT NULL,
+    created_at TEXT NOT NULL,
+    mastery_updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_state_version ON learner_model_state(model_version);
+CREATE INDEX IF NOT EXISTS idx_model_state_node ON learner_model_state(curriculum_node_id);
+CREATE INDEX IF NOT EXISTS idx_model_state_score ON learner_model_state(mastery_score);
+"""
+
+# Additive V7 columns on the legacy weaknesses table (ALTER TABLE ADD COLUMN;
+# applied idempotently by migrate_v7 — existing rows keep sane defaults).
+V7_WEAKNESS_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("curriculum_node_id", "TEXT NULL"),
+    ("origin", "TEXT NOT NULL DEFAULT 'manual'"),
+    ("weakness_score", "REAL NULL"),
+    ("failure_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("recent_failure_rate", "REAL NULL"),
+    ("prerequisite_impact", "INTEGER NOT NULL DEFAULT 0"),
+    ("review_priority", "REAL NULL"),
+    ("low_confidence", "INTEGER NOT NULL DEFAULT 0"),
+    ("last_failure_at", "TEXT NULL"),
+    ("recovered_at", "TEXT NULL"),
+)
+
 # V3 Schema DDL statements
 V3_SCHEMA_DDL = """
 -- Migration tracking table

@@ -23,6 +23,12 @@ After installation, the following commands are available in your shell:
 
 ## Commands
 
+Commands: `product`, `ask`, `study`, `study-log`, `mastery [topic]`, `learner`,
+`weaknesses`, `history`, `recalculate`, `study-priority`, `due`, `review`,
+`import-cards`, `syllabus`, `curriculum`, `path`, `prereq`, `textbooks`,
+`textbook-add`, `textbook-info`, `textbook-link`, `textbook-evidence`, `claims`,
+`claim-info`, `verify-pack`, `evidence-status`, `migrate`, `doctor`, `status`.
+
 ### `medforge product <topic>` — Generate Study Pack
 
 Create a complete evidence-based study pack for a medical topic.
@@ -99,7 +105,10 @@ medforge study-log "cardiac cycle" 85
 ```
 
 **Output:** JSON with the completed session id, the new mastery row
-(`mastery_score`, `confidence_score`, attempts), and any recorded weaknesses.
+(`mastery_score`, `confidence_score`, attempts), any recorded weaknesses, and
+the updated recency-weighted learner state (`learner_model`). Each logged score
+is also appended as a P6 learning attempt linked to its `session_id`, so the
+learner model can always be recalculated from history.
 
 Weaknesses are recorded via the dashboard (concept + misconception + severity
 fields in the STUDY tab) or programmatically:
@@ -115,19 +124,103 @@ mf.log_study_result("cardiac cycle", 7, weaknesses=[
 
 ---
 
-### `medforge mastery` — Mastery & Weakness Report
+### `medforge mastery [topic]` — Mastery Report / Recency-Weighted State
 
-Print a JSON snapshot of learner tracking across all topics: per-topic mastery
-(weakest first), unresolved weaknesses by severity, and recent sessions.
+With no argument: the legacy JSON snapshot of learner tracking across all
+topics — per-topic mastery (weakest first), unresolved weaknesses by severity,
+and recent sessions.
 
 ```bash
 medforge mastery
 ```
 
-The same data powers the **STUDY → Mastery & weaknesses** panel in the
-dashboard. Mastery is the running mean of session scores; confidence is the
-share of attempts scoring 70/100 or better. Weaknesses escalate in severity
-when re-observed and can be resolved from the V3 tables once mastered.
+With a topic: the **P6 recency-weighted estimate** for that topic, including
+evidence strength, recency split, confidence calibration and prerequisite
+risks.
+
+```bash
+medforge mastery "GH axis"
+```
+
+```json
+{
+  "mastery": 0.3511, "mastery_percent": 35.1, "evidence_count": 3,
+  "uncertainty": 0.5, "consistency": 0.9589,
+  "recent_performance": 0.2767, "historical_performance": null,
+  "model_version": "p6-rwm-v1",
+  "confidence": {"confidence_estimate": null, "calibration_gap": null,
+                 "has_confidence_data": false, "mismatch": false},
+  "recent": {"recent_window_days": 14.0, "trend": null},
+  "prerequisite_risks": {"node_id": "…", "weak_count": 0, "risks": []}
+}
+```
+
+The same data powers the **STUDY → Mastery & weaknesses** panel and the
+**LEARNER** tab in the dashboard. The legacy snapshot's `mastery_score` remains
+the running mean of session scores (kept for compatibility); the P6 estimate is
+a decayed, shrunk estimate — see `docs/LEARNER_MODEL.md`.
+
+---
+
+### `medforge learner` — Learner-Model Summary
+
+Runs weakness detection, then prints the model-level summary: topics tracked,
+total events, average mastery, known vs possible (low-confidence) weaknesses,
+calibration mismatches, strongest/weakest/improving/declining topics, and the
+current study priorities.
+
+```bash
+medforge learner
+```
+
+---
+
+### `medforge weaknesses` — Unresolved Weaknesses
+
+Runs weakness detection first (creating/updating/recovering learner-model rows),
+then lists every unresolved weakness with its score, severity, failure count,
+recent failure rate, prerequisite impact and confidence flag.
+
+```bash
+medforge weaknesses
+```
+
+---
+
+### `medforge history <topic>` — Attempt History
+
+Append-only learning-event history for a topic, newest first (score, source,
+item type, session id, confidence, timestamps).
+
+```bash
+medforge history "GH axis"
+```
+
+---
+
+### `medforge recalculate <topic|all>` — Rebuild From History
+
+Recomputes a topic's state (or every topic's) from stored attempts at the
+stored evaluation time. `matches_stored: true` means the materialized state is
+exactly reproducible from history.
+
+```bash
+medforge recalculate "GH axis"
+medforge recalculate all
+```
+
+---
+
+### `medforge study-priority` — Recommended Study Order
+
+Deterministic priority signal over all tracked topics:
+`0.35·weakness + 0.20·uncertainty + 0.20·overdue + 0.15·recent_failure +
+0.10·prerequisite_impact`, with every component and weight returned for
+inspection. This is a signal for the P7 tutor, not a planner.
+
+```bash
+medforge study-priority
+```
 
 ---
 

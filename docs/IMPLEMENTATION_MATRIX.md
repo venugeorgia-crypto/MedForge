@@ -77,14 +77,20 @@ chunks=47, schema_migrations=1`.
 | Per-task source ranking | single generic `quality` weight (domain trust 0.55–1.0) | `medforge/types.py`, `medforge/retrieval.py` | No task-conditioned hierarchy; quality is a *ranking hint only* (labeled as such in prompts/reports) | `test_retrieval.py` | Medium | **PARTIAL** |
 | Preserve authority separately from rank | `publication_type` exists in `medical_sources` (dead table) | `core/database/schema.py` | Not connected to retrieval | — | Medium | **MISSING wiring** |
 
-## P6 Learner model
+## P6 Learner model — **IMPLEMENTED (V7)**
+
+Model documentation: `docs/LEARNER_MODEL.md`; audit + execution results:
+`docs/P6_MATRIX.md`.
 
 | Requirement | Current | Source file | Actual behavior | Tests | Risk | Verdict |
 |---|---|---|---|---|---|---|
-| Topic mastery + confidence | incremental mean over attempts + pass-share | `medforge/learner.py::update_mastery` | Real, persisted, tested | yes | Low | **KEEP** |
-| Recency-weighted / question-level evidence | mastery is a running mean (no recency decay); review_log has per-review grades | `learner.py`, schema | Review history exists; mastery not recency-weighted | partial | Medium | **PARTIAL → FIX later** |
-| Concept/subtopic mastery, learning velocity, forgetting | weaknesses per (topic, concept) with error escalation; FSRS stability tracks forgetting per card | `learner.py` | No concept-level mastery aggregation; velocity not computed | partial | Medium | **PARTIAL** |
-| Survives restart/upgrade/regeneration | SQLite-backed; content-addressed card ids survive pack rebuild | `learner.py` | Verified by idempotent import tests | yes | Low | **KEEP** |
+| Topic mastery + confidence | incremental mean over attempts + pass-share | `medforge/learner.py::update_mastery` | Real, persisted, tested; **kept** as the legacy compatibility surface | yes | Low | **KEEP** |
+| Recency-weighted / question-level evidence | exponential decay (half-life 21 d) with prior shrinkage over append-only `learning_attempts`; question-level fields (`item_type`, `correct`, `confidence`, response time) recorded | `learner_model.py`, `schema.py` (V7), `learner.py` hooks | Recency dominates stale samples; ten old 0.95s lose to three recent 0.30s | 32 P6 tests | Low | **DONE (`p6-rwm-v1`)** |
+| Concept/subtopic mastery, learning velocity, forgetting | per-topic state with recent/historical split, consistency, ESS-based uncertainty; prerequisite impact via the P2 graph | `learner_model.py` | Trend + uncertainty exposed; prerequisite gaps reported read-only and fed to priority | yes | Low | **PARTIAL → trend present, subtopic rollup still per-topic** |
+| Weakness severity, recovery, review priority | deterministic detector (known vs possible/low-confidence, auto-recovery) + weighted priority with exposed components | `learner_model.py::detect_weaknesses`, `study_priority` | Verified end-to-end: medium weakness at 0.55, auto-recovery after 0.80+0.90 | yes | Low | **DONE** |
+| Confidence calibration | confidence tracked separately, signed gap + direction, `None` when no observations | `learner_model.py::get_confidence` | Over-/under-confident cases verified (gap +0.574 / −0.6289) | yes | Low | **DONE** |
+| Full recalculation from history | pure rebuild from stored attempts at the stored evaluation time | `learner_model.py::recalculate_mastery/_all` | `matches_stored: true`, mismatches [] | yes | Low | **DONE** |
+| Survives restart/upgrade/regeneration | SQLite-backed; content-addressed card ids survive pack rebuild; V7 additive/idempotent | `learner.py`, `migrate_v7.py` | Verified by idempotent import + migration tests | yes | Low | **KEEP** |
 
 ## P7 Adaptive tutor
 
@@ -172,8 +178,9 @@ chunks=47, schema_migrations=1`.
 1. **The 2.1 core loop is real and tested** — ingestion → hybrid retrieval → cited generation → exports → SR review, with resumability, backups, and genuine security hardening. **Preserve it (P1 satisfied).**
 2. **The biggest documented-but-not-implemented gap is the curriculum layer**: V3 schema tables exist, are empty, and are referenced by zero lines of application code. All P2 acceptance criteria are unmet today.
 3. **Citation labels ≠ verification (P4)**: resolved — V6 stores first-class claims, evidence and verification history, and the model-assisted verifier produces explicit SUPPORTED/PARTIALLY_SUPPORTED/UNSUPPORTED/CONTRADICTED/INSUFFICIENT_EVIDENCE results with deterministic aggregation. The label scan remains as an honest compatibility floor.
-4. **Tutor is not interactive (P7)** and assessment has no question-level records (P8).
+4. **Tutor is not interactive (P7)**; P6 now records question-level performance events (`item_type`, `correct`, `confidence`, response time) but the full assessment framework is still P8, and P7 must not start until the P6 API is stable (it now is).
 5. Dead `medical_sources` table means P5's authority model is unwired.
+6. **Mastery is now a recency-weighted estimate with explicit uncertainty, calibration and recomputability (P6, `p6-rwm-v1`)** — the older "running mean" description in this matrix is the P6 starting point, kept for history; the legacy mean still exists and is still written.
 
 ## Change record
 
@@ -182,4 +189,5 @@ chunks=47, schema_migrations=1`.
 | Curriculum engine (schema extension + engine + CLI + dashboard + tests) | P2 | **DONE** — see `docs/CURRICULUM.md`; 15 new tests, 61/61 passing; V4 migration applied to the live DB with a verified pre-migration backup (SR queue 119 and 47 chunks preserved) |
 | Textbook provenance engine (documents/editions, chapter/section/page/chunk provenance, curriculum links, V5 migration, CLI + dashboard, tests) | P3 | **DONE** — see `docs/P3_MATRIX.md` execution results and `docs/TEXTBOOKS.md`; 13 new tests, 74/74 passing; V5 applied to the live DB with verified backup `backups/medforge_pre_v5_backup.db` (all row counts unchanged) |
 | Evidence graph (claims/evidence/relationships/verification history, model-assisted verifier with abstention, contradiction representation, curriculum traceability, CLI + dashboard EVIDENCE tab, V6 migration, tests) | P4 | **DONE** — see `docs/P4_MATRIX.md` execution results and `docs/EVIDENCE.md`; 20 new tests, 94/94 passing; V6 applied to the live DB with verified backup `backups/medforge_pre_v6_backup.db` (pre-existing row counts unchanged; live model-assisted verification run recorded) |
-| Source hierarchy (P5), recency mastery (P6), interactive tutor (P7), assessment records (P8), card links + leech rewrite (P9), PDF/OCR upgrade (P11), video renderer (P12), provider abstraction (P13), distributable bundle (P15) | P5–P15 | **NOT STARTED — planned in dependency order; each with its own WHY/WHAT/RISK/MIGRATION/TEST/ROLLBACK record at implementation time. Next: P6 recency-weighted learner model.** |
+| Recency-weighted learner model (append-only `learning_attempts`, materialized `learner_model_state`, extended weakness columns, confidence calibration, prerequisite risk API, deterministic study priority, recalculation + versioning, CLI + dashboard LEARNER tab, V7 migration, tests) | P6 | **DONE** — see `docs/P6_MATRIX.md` execution results and `docs/LEARNER_MODEL.md`; 32 new tests, 126/126 passing; V7 applied to the live DB with verified backup `backups/medforge_pre_v7_backup.db` (all pre-existing row counts unchanged, integrity + foreign-key checks clean). Two CLI defects found during end-to-end validation and fixed. |
+| Source hierarchy (P5), interactive tutor (P7), assessment records (P8), card links + leech rewrite (P9), PDF/OCR upgrade (P11), video renderer (P12), provider abstraction (P13), distributable bundle (P15) | P5–P15 | **NOT STARTED — planned in dependency order; each with its own WHY/WHAT/RISK/MIGRATION/TEST/ROLLBACK record at implementation time. Next: P7 interactive adaptive tutor (consume the stable P6 learner-state API).** |

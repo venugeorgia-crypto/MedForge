@@ -47,7 +47,7 @@ def show_pack(out, key):
                 z.write(f, f.name)
     st.download_button("Download complete pack",data.getvalue(),file_name=out.parent.name+"-"+out.name+".zip",mime="application/zip",key=key)
 
-tabs=st.tabs(["PRODUCT","STUDY","REVIEW","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","LIBRARY","HISTORY","STATUS"])
+tabs=st.tabs(["PRODUCT","STUDY","REVIEW","LEARNER","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","LIBRARY","HISTORY","STATUS"])
 with tabs[0]:
     topic=st.text_input("What do you want to learn?",placeholder="cardiac cycle",max_chars=250)
     st.caption("PDFs + PubMed + authoritative web pages → study guide, workbook, cards, quiz and scripts.")
@@ -176,13 +176,61 @@ with tabs[2]:
                         st.rerun()
                     except Exception as e: show_error(e)
 with tabs[3]:
+    st.caption("Recency-weighted learner-model estimate (P6) from your own attempts — an inspectable estimate, not a validated psychometric score.")
+    try:
+        summ=mf.learner_summary(limit=6)
+        s=summ["summary"]
+        c1,c2,c3,c4,c5,c6=st.columns(6)
+        c1.metric("Topics tracked",s["topics_tracked"])
+        c2.metric("Avg mastery",f"{s['avg_mastery']:.0f}%")
+        c3.metric("Events",s["events_total"])
+        c4.metric("Known weaknesses",s["known_weaknesses"])
+        c5.metric("Possible (low confidence)",s["possible_weaknesses"])
+        c6.metric("Calibration mismatches",s["calibration_mismatches"])
+        st.caption(f"Model {summ['model_version']} · half-life {summ['half_life_days']:g} days · overdue cards {s['overdue_cards']}")
+        if summ["strongest"]: st.markdown("**Strongest areas**"); st.dataframe(summ["strongest"],width="stretch",hide_index=True)
+        if summ["weakest"]: st.markdown("**Weakest areas**"); st.dataframe(summ["weakest"],width="stretch",hide_index=True)
+        if summ["improving"]: st.markdown("**Recently improving**"); st.dataframe(summ["improving"],width="stretch",hide_index=True)
+        if summ["declining"]: st.markdown("**Recently declining**"); st.dataframe(summ["declining"],width="stretch",hide_index=True)
+        if summ["confidence_mismatches"]:
+            st.markdown("**Confidence vs performance mismatches** (|gap| ≥ 0.2)")
+            st.dataframe(summ["confidence_mismatches"],width="stretch",hide_index=True)
+        st.markdown("**Recommended study priorities**")
+        st.dataframe([{"Topic":p["topic"],"Priority":p["priority"],"Mastery":p["mastery_percent"],"Weakness":p["components"]["weakness"],"Uncertainty":p["components"]["uncertainty"],"Overdue":p["components"]["overdue"],"Recent failure":p["components"]["recent_failure"],"Prereq impact":p["components"]["prerequisite_impact"]} for p in summ["priorities"]],width="stretch",hide_index=True)
+        topics=[p["topic"] for p in mf.study_priority(limit=100)["items"]]
+        if topics:
+            st.subheader("Topic detail")
+            pick=st.selectbox("Topic",topics,key="learner_topic")
+            mst=mf.get_mastery(pick); conf=mf.get_confidence(pick); rec=mf.get_recent_performance(pick)
+            risks=mf.get_prerequisite_risks(pick)
+            if mst:
+                d1,d2,d3,d4=st.columns(4)
+                d1.metric("Mastery estimate",f"{mst['mastery_percent']:.0f}%")
+                d2.metric("Evidence count",mst["evidence_count"])
+                d3.metric("Uncertainty",f"{mst['uncertainty']:.2f}")
+                d4.metric("Consistency","—" if mst["consistency"] is None else f"{mst['consistency']:.2f}")
+                st.caption("Recent performance: "+("—" if rec["recent_performance"] is None else f"{rec['recent_performance']:.2f}")+" · historical: "+("—" if rec["historical_performance"] is None else f"{rec['historical_performance']:.2f}")+" · trend: "+("—" if rec["trend"] is None else f"{rec['trend']:+.2f}")+" · last studied: "+str(mst["last_attempt_at"] or "—"))
+                if conf and conf["has_confidence_data"]:
+                    st.caption(f"Confidence {conf['confidence_estimate']:.2f} vs mastery {conf['mastery']:.2f} → gap {conf['calibration_gap']:+.2f} ({conf['direction']})" + (" · MISMATCH" if conf["mismatch"] else ""))
+                else: st.caption("No learner confidence observations yet — calibration is not fabricated.")
+                wks=[w for w in mf.get_weaknesses() if w["topic_id"]==mst["mastery_key"]]
+                st.markdown("**Weakness state:** "+("none open" if not wks else "; ".join(f"{w['severity']} ({'possible/low-confidence' if w['low_confidence'] else 'known'}), score {w['weakness_score']}" for w in wks)))
+                if risks.get("risks"):
+                    st.markdown("**Prerequisites**")
+                    st.dataframe([{"Prerequisite":r["title"],"Mastery":r["mastery_percent"],"Evidence":r["evidence_count"],"Weak":"yes" if r["weak"] else "","Impact":r["impact"],"Type":r["relationship_type"]} for r in risks["risks"]],width="stretch",hide_index=True)
+                    if risks["weak_count"]: st.caption(f"⚠ {risks['weak_count']} weak prerequisite(s) — exposed as a risk signal, not subtracted from this topic's mastery.")
+                if st.button("Recalculate this topic from history",key="learner_recalc"):
+                    r=mf.recalculate_mastery(pick)
+                    st.success("Materialized state matches recalculation." if r["matches_stored"] else "MISMATCH — stored state differs from history!")
+    except Exception as e: show_error(e)
+with tabs[4]:
     question=st.text_area("Ask your indexed evidence library",max_chars=1500)
     if st.button("Ask") and question.strip():
         with st.spinner("Finding source passages..."):
             try: st.session_state["answer"]=mf.ask(question.strip())
             except Exception as e: show_error(e)
     if st.session_state.get("answer"): st.markdown(st.session_state["answer"])
-with tabs[4]:
+with tabs[5]:
     st.caption("Canonical curriculum: Semester → Subject → Week → Seminar → Topic → Subtopic → Learning Objective. Paste a weekly or seminar syllabus; topics become traceable study targets.")
     c1,c2,c3=st.columns(3)
     syn_subject=c1.text_input("Subject (optional)",key="curr_subject",placeholder="e.g. Endocrinology")
@@ -237,7 +285,7 @@ with tabs[4]:
                     mf.add_prerequisite(pre_topic.strip(),pre_req.strip(),pre_type)
                     st.success(f"Recorded: {pre_req} → {pre_topic} ({pre_type})")
                 except Exception as e: show_error(e)
-with tabs[5]:
+with tabs[6]:
     st.caption("Registered textbooks with stable edition identity and page/section provenance. Re-importing the same file is idempotent; a changed edition becomes a new version.")
     try:
         books=mf.list_textbooks()
@@ -292,7 +340,7 @@ with tabs[5]:
                             st.markdown(f"**{link.get('textbook_node_title') or link['document_title']}** · {link['link_type']} · p. {link.get('start_page') or link.get('page_start') or '?'}–{link.get('end_page') or link.get('page_end') or '?'}")
                             for pv in link["previews"]: st.caption(pv["locator"]+" — "+pv["text"][:180])
                 except Exception as e: show_error(e)
-with tabs[6]:
+with tabs[7]:
     st.caption("Claim → verification status → evidence → source provenance. Excerpts stay in the local database (private, not redistributed).")
     try:
         snap=mf.evidence_snapshot()
@@ -325,7 +373,7 @@ with tabs[6]:
                         for run in runs[:15]:
                             st.caption(f"{run['created_at']} · {run['result']} · {run['method']} · {run['notes'][:140]}")
     except Exception as e: show_error(e)
-with tabs[7]:
+with tabs[8]:
     st.caption("Add medical PDFs you are entitled to use. Changed files are indexed on the next product run.")
     uploads=st.file_uploader("Add PDFs",type=["pdf"],accept_multiple_files=True)
     if st.button("Save selected PDFs"):
@@ -341,7 +389,7 @@ with tabs[7]:
             st.success("Saved "+target.name)
     st.code(str(mf.DOCS),language=None)
     st.caption("Scanned PDFs with no readable text are reported. OCR is not yet included.")
-with tabs[8]:
+with tabs[9]:
     states=sorted(mf.PRODUCTS.glob("*/v*/state.json"),key=lambda p:p.stat().st_mtime,reverse=True)
     if not states: st.info("Your generated packs will appear here.")
     for path in states[:30]:
@@ -350,7 +398,7 @@ with tabs[8]:
         with st.expander(f"{state.get('topic','Topic')} · {path.parent.name} · {'Draft complete' if state.get('complete') else 'In progress'}"):
             if state.get("complete"): show_pack(path.parent,"history-"+str(path))
             else: st.caption("Enter this topic in PRODUCT to resume compatible saved work.")
-with tabs[9]:
+with tabs[10]:
     try:
         s=mf.status()
         a,b,c=st.columns(3)

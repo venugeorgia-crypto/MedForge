@@ -30,6 +30,11 @@ from medforge import (  # noqa: E402
     record_weakness, resolve_weakness, log_study_result, learner_snapshot,
     card_item_id, import_flashcards, due_items, review_card, review_analytics,
     spaced_repetition_snapshot, SCHEDULERS, DEFAULT_SCHEDULER,
+    complete_session, ensure_learner_model_tables, record_learning_event,
+    recalculate_mastery, recalculate_all, get_mastery, get_confidence,
+    get_recent_performance,
+    get_weaknesses, get_prerequisite_risks, study_priority, detect_weaknesses,
+    learner_history, learner_summary,
     hybrid_retrieve, source_pack, keyword_results, vector_results,
     generate_text, citation_audit, parse_tsv_cards,
     write_pdf, make_anki,
@@ -82,6 +87,8 @@ def main() -> None:
               "textbook-evidence <topic> | "
               "claims [STATUS] | claim-info <claim_id> | verify-pack [pack_dir] | "
               "evidence-status | "
+              "learner | mastery <topic> | weaknesses | history <topic> | "
+              "recalculate <topic|all> | study-priority | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -110,8 +117,6 @@ def main() -> None:
         result = log_study_result(topic, float(score),
                                   notes="Logged from the command line")
         print(json.dumps(result, indent=2))
-    elif cmd == "mastery":
-        print(json.dumps(learner_snapshot(), indent=2))
     elif cmd == "due":
         print(json.dumps(spaced_repetition_snapshot(), indent=2))
     elif cmd == "review":
@@ -274,6 +279,39 @@ def main() -> None:
             print(json.dumps(claim, indent=2))
     elif cmd == "evidence-status":
         print(json.dumps(evidence_snapshot(), indent=2))
+    elif cmd == "learner":
+        detect_weaknesses()
+        print(json.dumps(learner_summary(), indent=2))
+    elif cmd == "mastery":
+        # mastery [topic] — no arg: legacy snapshot; with a topic: P6 state.
+        if not arg:
+            print(json.dumps(learner_snapshot(), indent=2))
+            return
+        info = get_mastery(arg.strip())
+        if info is None:
+            raise SystemExit(
+                f"No learner-model state for {arg.strip()!r}; record a session first."
+            )
+        info["confidence"] = get_confidence(arg.strip())
+        info["recent"] = get_recent_performance(arg.strip())
+        info["prerequisite_risks"] = get_prerequisite_risks(arg.strip())
+        print(json.dumps(info, indent=2))
+    elif cmd == "weaknesses":
+        detect_weaknesses()
+        print(json.dumps(get_weaknesses(), indent=2))
+    elif cmd == "history":
+        if not arg:
+            raise SystemExit("Usage: medforge_core history <topic>")
+        print(json.dumps(learner_history(arg.strip(), limit=50), indent=2))
+    elif cmd == "recalculate":
+        if not arg:
+            raise SystemExit("Usage: medforge_core recalculate <topic|all>")
+        if arg.strip().lower() == "all":
+            print(json.dumps(recalculate_all(), indent=2))
+        else:
+            print(json.dumps(recalculate_mastery(arg.strip()), indent=2))
+    elif cmd == "study-priority":
+        print(json.dumps(study_priority(), indent=2))
     elif cmd == "migrate":
         with job_lock():
             print(json.dumps(migrate_database(), indent=2))

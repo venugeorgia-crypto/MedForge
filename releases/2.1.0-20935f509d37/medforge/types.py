@@ -138,6 +138,51 @@ EVIDENCE_MAX_CANDIDATES_PER_CLAIM: Final[int] = 3
 EVIDENCE_MAX_CLAIMS_PER_RUN: Final[int] = 25
 EVIDENCE_VERIFIER_VERSION: Final[str] = "p4-verifier-v1"
 
+# ─── V7 recency-weighted learner model (P6) ───
+# V7 enums (mirror core.database.schema).
+LEARNING_ATTEMPT_ITEM_TYPES: Final[tuple[str, ...]] = (
+    "session", "card", "question", "concept", "topic", "manual",
+)
+LEARNING_ATTEMPT_SOURCES: Final[tuple[str, ...]] = (
+    "session", "review", "manual", "backfill",
+)
+LEARNER_WEAKNESS_ORIGINS: Final[tuple[str, ...]] = (
+    "manual", "review", "learner_model",
+)
+# Versioned algorithm id stored with every materialized learner state row.
+LEARNER_MODEL_VERSION: Final[str] = "p6-rwm-v1"
+# Exponential decay half-life in days: an observation this old counts half as
+# much as a brand-new one (weight = 0.5 ** (age/half_life)).
+LEARNER_HALF_LIFE_DAYS: Final[float] = 21.0
+# Window that separates "recent" from "historical" performance.
+LEARNER_RECENT_WINDOW_DAYS: Final[float] = 14.0
+# Uninformed prior mastery and its strength in pseudo-observations: a brand
+# new learner is assumed mid-level (0.5) with weak evidence (1.5 obs), so one
+# success is never "mastered" and old data cannot outvote recent failures.
+LEARNER_PRIOR_MASTERY: Final[float] = 0.5
+LEARNER_PRIOR_STRENGTH: Final[float] = 1.5
+# An attempt at/above this fraction counts as a success.
+LEARNER_PASS_THRESHOLD: Final[float] = 0.70
+# Mastery below this is a weakness candidate; at/above the recovery threshold
+# with solid recent performance an auto weakness resolves.
+LEARNER_WEAK_THRESHOLD: Final[float] = 0.60
+LEARNER_RECOVERY_THRESHOLD: Final[float] = 0.75
+# Fast recovery path: mastery floor plus TWO consecutive passing attempts whose
+# mean is at least this high (a single success never recovers a weakness, and a
+# barely-passing pair does not either).
+LEARNER_RECOVERY_MASTERY_FLOOR: Final[float] = 0.65
+LEARNER_RECOVERY_RECENT_MIN: Final[float] = 0.75
+# Below this many observations a weakness is POSSIBLE (low-confidence), not known.
+LEARNER_MIN_EVIDENCE_KNOWN_WEAKNESS: Final[int] = 3
+# Deterministic study-priority weights (each component normalized 0..1).
+LEARNER_PRIORITY_WEIGHTS: Final[dict[str, float]] = {
+    "weakness": 0.35,
+    "uncertainty": 0.20,
+    "overdue": 0.20,
+    "recent_failure": 0.15,
+    "prerequisite_impact": 0.10,
+}
+
 # ─── System Prompt ───
 SYSTEM_EVIDENCE: Final[str] = """You are MedForge, a cautious medical education assistant.
 Use ONLY the supplied evidence for factual medical claims.

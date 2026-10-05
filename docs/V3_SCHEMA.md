@@ -347,6 +347,35 @@ runs V5 → V4 first so foreign keys always resolve, optional verified backup at
 existing table is altered. Evidence excerpts are internal verification data and
 are never written into distributable artifacts. See `docs/EVIDENCE.md`.
 
+### V7 learner-model enums
+`LEARNING_ATTEMPT_ITEM_TYPES` = `('session', 'card', 'question', 'concept',
+'topic', 'manual')` · `LEARNING_ATTEMPT_SOURCES` = `('session', 'review',
+'manual', 'backfill')` · `LEARNER_WEAKNESS_ORIGINS` = `('manual', 'review',
+'learner_model')`.
+
+## V7 Recency-Weighted Learner Model Tables (migration `7.0.0`)
+
+Purely additive: two new tables plus ten guarded `ALTER TABLE ADD COLUMN`
+additions to `learner_weaknesses` (no rebuild, no row rewrite). Full model and
+math: `docs/LEARNER_MODEL.md`. Audit/execution record: `docs/P6_MATRIX.md`.
+
+| Table | Purpose | Key columns |
+| --- | --- | --- |
+| `learning_attempts` | Append-only performance events | attempt_id (PK), session_id FK→interactive_sessions SET NULL, curriculum_node_id FK→curriculum_nodes SET NULL, mastery_key, item_type, item_id, presented_at, answered_at, score (0–1), correct, learner_confidence, response_time_seconds, source, content_version, created_at |
+| `learner_model_state` | Materialized estimate per `mastery_key` (PK) | curriculum_node_id FK, model_version, half_life_days, mastery_score, weighted_evidence, evidence_count, recent_performance, historical_performance, consistency, uncertainty, confidence_estimate, confidence_calibration, last_attempt_at, last_success_at, last_failure_at, created_at, mastery_updated_at |
+
+`learner_weaknesses` additions: `curriculum_node_id`, `origin` (default
+`'manual'`), `weakness_score`, `failure_count`, `recent_failure_rate`,
+`prerequisite_impact`, `review_priority`, `low_confidence` (default `0`),
+`last_failure_at`, `recovered_at`.
+
+Defined in `core/database/schema.py` (`V7_SCHEMA_DDL`, `V7_WEAKNESS_COLUMNS`);
+applied by `core/database/migrate_v7.py::ensure_learner_model_v7()` (idempotent,
+self-healing, runs V6 → V5 → V4 first so the session/curriculum foreign keys
+resolve, optional verified backup at `backups/medforge_pre_v7_backup.db`).
+Rollback: drop the two new tables and leave the additive weakness columns (no
+existing data is touched).
+
 ### `PREREQUISITE_TYPES`
 `('strict', 'recommended', 'co-requisite')`
 

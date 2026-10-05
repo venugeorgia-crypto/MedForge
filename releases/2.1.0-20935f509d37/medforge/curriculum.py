@@ -714,6 +714,14 @@ def curriculum_progress() -> Dict[str, Any]:
     finally:
         con.close()
     mastery_by_slug = {r["topic_id"]: _row_dict(r) for r in mastery_rows}
+    # P6 (additive): recency-weighted model state per topic slug, best-effort —
+    # P2 behavior is unchanged when the learner model has no data.
+    try:
+        from medforge.learner_model import model_state_rows
+
+        rwm_by_slug = {s["mastery_key"]: s for s in model_state_rows()}
+    except Exception:
+        rwm_by_slug = {}
     by_parent: Dict[Optional[str], List[Dict[str, Any]]] = {}
     for r in nodes:
         by_parent.setdefault(r["parent_id"], []).append(_row_dict(r))
@@ -736,10 +744,15 @@ def curriculum_progress() -> Dict[str, Any]:
                 studied += 1
                 if score >= 70.0:
                     mastered += 1
+            rwm = rwm_by_slug.get(slugify(t["title"])) or {}
             entries.append({
                 "title": t["title"], "id": t["id"],
                 "mastery": score, "attempts": m["total_attempts"] if m else 0,
                 "last_attempt_at": m["last_attempt_at"] if m else None,
+                "rwm_mastery": rwm.get("mastery_score"),
+                "rwm_uncertainty": rwm.get("uncertainty"),
+                "rwm_evidence_count": rwm.get("evidence_count", 0),
+                "rwm_recent_performance": rwm.get("recent_performance"),
             })
         return {
             "topics": entries,
@@ -803,6 +816,7 @@ def curriculum_progress() -> Dict[str, Any]:
             "topics_studied": sum(s["topics_studied"] for s in subjects_out),
             "topics_mastered": sum(s["topics_mastered"] for s in subjects_out),
             "studied_unmapped": studied_unmapped,
+            "learner_model_tracked": len(rwm_by_slug),
         },
     }
 
