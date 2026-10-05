@@ -407,6 +407,39 @@ runs V7 → V6 → V5 → V4 first so the curriculum foreign keys resolve, optio
 verified backup at `backups/medforge_pre_v8_backup.db`). Rollback: drop the
 three new tables (no existing data is touched).
 
+### V9 assessment enums
+`ASSESSMENT_ITEM_TYPES` = `('MCQ_SINGLE', 'MCQ_MULTI', 'TRUE_FALSE',
+'SHORT_ANSWER', 'CLINICAL_REASONING', 'RECALL')` · `ASSESSMENT_ITEM_STATUSES`
+= `('DRAFT', 'VALIDATION', 'REVIEW_REQUIRED', 'APPROVED', 'ACTIVE', 'RETIRED',
+'REJECTED')` · `ASSESSMENT_MODES` = `('PRACTICE', 'EXAM', 'REVIEW')` ·
+`ASSESSMENT_SESSION_STATUSES` = `('created', 'active', 'submitted',
+'completed', 'expired', 'abandoned')` · `ASSESSMENT_SCOPE_TYPES` = `('topic',
+'seminar', 'week', 'subject', 'custom')` · `ASSESSMENT_BLUEPRINT_STATUSES` =
+`('DRAFT', 'ACTIVE', 'RETIRED')` · attempt correctness reuses
+`TUTOR_CORRECTNESS` and grading status reuses `TUTOR_GRADING_STATUSES`.
+
+## V9 Assessment Tables (migration `9.0.0`)
+
+Purely additive: six new tables plus indexes (no rebuild, no row rewrite, no
+altered column). Item lifecycle, versioning, evidence gate, blueprints,
+selection, scoring, timing, statistics and remediation: `docs/ASSESSMENT.md`.
+Audit + execution record: `docs/P8_MATRIX.md`.
+
+| Table | Purpose | Key columns |
+| --- | --- | --- |
+| `assessment_items` | Item identity + lifecycle (bank inventory) | item_id (PK), item_type CHECK, status CHECK, current_version, topic, mastery_key, concept, curriculum_node_id FK→curriculum_nodes SET NULL, author, source_kind, generation_mode, item_model_version, quality_flags, retired_at, created_at, updated_at |
+| `assessment_item_versions` | Immutable item content per version; `UNIQUE(item_id, item_version)` | item_id FK CASCADE, item_version, stem, difficulty_target (1–5), choices, correct_choices, rubric, correct_answer, explanation, scoring_policy, evidence_requirement, evidence_state, evidence_refs, claim_refs, content_hash, validation_report, duplicate_of, item_model_version, review_note, author, created_at |
+| `assessment_blueprints` | Assessment definitions (scope + distributions) | blueprint_id (PK), blueprint_version, title, scope_type CHECK, scope_node_id FK, scope_node_ids, item_count (1–500), type_distribution, difficulty_distribution, topic_distribution, prerequisite_coverage, time_limit_minutes, pass_threshold, status CHECK, validation_report, seed, created_at, updated_at |
+| `assessment_sessions` | Persistent assessment sessions, separate from `tutor_sessions` | assessment_id (PK), learner_key, blueprint_id FK SET NULL, blueprint_version, title, mode CHECK, scope_type, scope_node_id, status CHECK, item_order, item_count, current_index, time_limit_minutes, started_at, expires_at, submitted_at, completed_at, elapsed_seconds, raw_score, max_score, percentage, pass_threshold, passed, grading_pending, summary, remediation, model_calls, review_logged, content_version, seed, created_at, updated_at |
+| `assessment_attempts` | One row per presented question; `UNIQUE(assessment_id, question_order)`; persists the presented item snapshot | attempt_id (PK AUTOINCREMENT), assessment_id FK CASCADE, item_id, item_version, question_order, stem, item_type, mastery_key, topic, difficulty, choices, correct_choices, rubric, correct_answer, scoring_policy, evidence_refs, evidence_state, presented_at, answered_at, learner_answer, correctness, score, max_score, confidence, response_time_seconds, grading_status, grading_source, grader_version, error_type, explanation, key_points_present, missing_key_points, incorrect_points, grading_history, grading_attempts, flagged, flag_reason, injection_suspected, learning_attempt_id (P6 event), created_at, updated_at |
+| `assessment_item_quality` | Persisted per-version statistics snapshots | id (PK AUTOINCREMENT), item_id, item_version, sample_size, metrics, flags, computed_at |
+
+Defined in `core/database/schema.py` (`V9_SCHEMA_DDL`); applied by
+`core/database/migrate_v9.py::ensure_assessment_v9()` (idempotent, self-healing,
+runs V8 → V7 → V6 → V5 → V4 first so the curriculum foreign keys resolve,
+optional verified backup at `backups/medforge_pre_v9_backup.db`). Rollback:
+drop the six new tables (no existing data is touched).
+
 ### `PREREQUISITE_TYPES`
 `('strict', 'recommended', 'co-requisite')`
 

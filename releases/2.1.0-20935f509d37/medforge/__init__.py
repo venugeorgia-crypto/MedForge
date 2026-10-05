@@ -63,6 +63,19 @@ from medforge.types import (
     TUTOR_HIGH_CONFIDENCE,
     TUTOR_OBJECTIVE_MASTERY,
     TUTOR_OBJECTIVE_RECENT,
+    ASSESSMENT_VERSION,
+    ASSESSMENT_ITEM_TYPES,
+    ASSESSMENT_ITEM_STATUSES,
+    ASSESSMENT_BLUEPRINT_STATUSES,
+    ASSESSMENT_MODES,
+    ASSESSMENT_SESSION_STATUSES,
+    ASSESSMENT_SCOPE_TYPES,
+    ASSESSMENT_DIFFICULTY_BANDS,
+    ASSESSMENT_MIN_ITEM_STAT_SAMPLE,
+    ASSESSMENT_MIN_DISCRIMINATION_SAMPLE,
+    ASSESSMENT_INSUFFICIENT_SAMPLE_LABEL,
+    ASSESSMENT_ITEM_QUALITY_FLAGS,
+    ASSESSMENT_DEFAULT_PASS_THRESHOLD,
 )
 from medforge.utils import (
     mkdirs, sh, slugify, utcnow, atomic_text, job_lock, serialized,
@@ -123,6 +136,18 @@ from medforge.textbook import (
     unlink_curriculum_text, textbook_evidence_for_topic,
     suggest_curriculum_links, registered_source_paths,
 )
+from medforge.assessment import (
+    ensure_assessment_tables, create_item, get_item, list_items, revise_item,
+    retire_item, validate_item, approve_item, reject_item, detect_duplicate_items,
+    generate_items, grade_item, grade_multi_select, create_blueprint,
+    validate_blueprint, get_blueprint, list_blueprints, select_items,
+    create_assessment, start_assessment, get_assessment_state, get_current_item,
+    submit_assessment_answer, retry_pending_grading, flag_item, next_item,
+    previous_item, complete_assessment, get_assessment_result,
+    get_item_statistics, compute_item_quality, get_assessment_remediation,
+    review_assessment, list_assessments, resume_assessment,
+    public_assessment_view, assessment_export,
+)
 from medforge.evidence import (
     ensure_evidence_tables, normalize_claim_text, claim_id_for, classify_claim,
     extract_claims, store_claims, store_evidence, evidence_id_for_source,
@@ -148,6 +173,13 @@ __all__ = [
     "TUTOR_MAX_TURNS", "TUTOR_DIFFICULTY_MIN", "TUTOR_DIFFICULTY_MAX",
     "TUTOR_LOW_CONFIDENCE", "TUTOR_HIGH_CONFIDENCE",
     "TUTOR_OBJECTIVE_MASTERY", "TUTOR_OBJECTIVE_RECENT",
+    # question-level assessment engine (V9/P8)
+    "ASSESSMENT_VERSION", "ASSESSMENT_ITEM_TYPES", "ASSESSMENT_ITEM_STATUSES",
+    "ASSESSMENT_BLUEPRINT_STATUSES", "ASSESSMENT_MODES",
+    "ASSESSMENT_SESSION_STATUSES", "ASSESSMENT_SCOPE_TYPES",
+    "ASSESSMENT_DIFFICULTY_BANDS", "ASSESSMENT_MIN_ITEM_STAT_SAMPLE",
+    "ASSESSMENT_MIN_DISCRIMINATION_SAMPLE", "ASSESSMENT_INSUFFICIENT_SAMPLE_LABEL",
+    "ASSESSMENT_ITEM_QUALITY_FLAGS", "ASSESSMENT_DEFAULT_PASS_THRESHOLD",
     # utils
     "mkdirs", "sh", "slugify", "utcnow", "atomic_text", "job_lock", "serialized",
     "chunks", "batch",
@@ -178,6 +210,17 @@ __all__ = [
     "record_tutor_learning_event", "complete_tutor_session", "get_tutor_summary",
     "next_tutor_step", "grade_mcq", "grade_key_points", "grade_free_text",
     "list_tutor_sessions", "public_view",
+    # question-level assessment engine (V9/P8)
+    "ensure_assessment_tables", "create_item", "get_item", "list_items",
+    "revise_item", "retire_item", "validate_item", "approve_item", "reject_item",
+    "detect_duplicate_items", "generate_items", "grade_item", "grade_multi_select",
+    "create_blueprint", "validate_blueprint", "get_blueprint", "list_blueprints",
+    "select_items", "create_assessment", "start_assessment", "get_assessment_state",
+    "get_current_item", "submit_assessment_answer", "retry_pending_grading",
+    "flag_item", "next_item", "previous_item", "complete_assessment",
+    "get_assessment_result", "get_item_statistics", "compute_item_quality",
+    "get_assessment_remediation", "review_assessment", "list_assessments",
+    "resume_assessment", "public_assessment_view", "assessment_export",
     # retrieval
     "hybrid_retrieve", "source_pack", "keyword_results", "vector_results",
     # generation

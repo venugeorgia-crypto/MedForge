@@ -59,6 +59,13 @@ from medforge import (  # noqa: E402
     ensure_evidence_tables, extract_claims, store_claims, verify_claim,
     verify_product_claims, claims_list, claim_info, evidence_snapshot,
     CLAIM_VERIFICATION_STATUS,
+    ensure_assessment_tables, create_item, get_item, list_items, validate_item,
+    approve_item, retire_item, create_blueprint, list_blueprints, select_items,
+    create_assessment, start_assessment, get_assessment_state, resume_assessment,
+    submit_assessment_answer, flag_item, next_item, previous_item,
+    complete_assessment, get_assessment_result, get_item_statistics,
+    get_assessment_remediation, review_assessment, list_assessments,
+    ASSESSMENT_ITEM_TYPES, ASSESSMENT_MODES,
     mkdirs, sh, slugify, utcnow, atomic_text, job_lock, serialized, chunks, batch,
 )
 
@@ -75,6 +82,30 @@ def set_offline(value: bool) -> None:
     global OFFLINE
     OFFLINE = bool(value)
     _types.OFFLINE = bool(value)
+
+
+def _resolve_scope_node(target: str):
+    """Resolve a curriculum node by id or title (CLI assessment scopes)."""
+    import sqlite3
+
+    con = sqlite3.connect(META_DB)
+    con.row_factory = sqlite3.Row
+    try:
+        row = con.execute(
+            "SELECT id, node_type, title FROM curriculum_nodes WHERE id=?", (target,)
+        ).fetchone()
+        if row is None:
+            row = con.execute(
+                "SELECT id, node_type, title FROM curriculum_nodes"
+                " WHERE lower(title)=lower(?)"
+                " ORDER BY CASE node_type WHEN 'Topic' THEN 0 ELSE 1 END, order_index LIMIT 1",
+                (target,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+    except sqlite3.OperationalError:
+        return None
+    finally:
+        con.close()
 
 
 def main() -> None:
@@ -97,6 +128,16 @@ def main() -> None:
               "tutor start <topic|--recommended>[|mode|goal] (also tutor \"start|<topic>|<mode>|<goal>\") | "
               "tutor status [id] | tutor next <id> | tutor answer <id>|<answer>|<confidence 0-1> | "
               "tutor end <id> | tutor summary <id> | "
+              "assessment list | assessment blueprints | "
+              "assessment create <blueprint_id|scope_node>|<MODE>[|<items>[|<minutes>]] | "
+              "assessment start <id> | assessment status [id] | assessment next <id> | "
+              "assessment answer <id>|<answer>[|<confidence 0-1>] | "
+              "assessment flag <id>[|<order>][|<reason>] | assessment submit <id> | "
+              "assessment result <id> | assessment review <id> | "
+              "assessment remediate <id> | assessment items [STATUS] | "
+              "assessment item-info <item_id>[|<version>] | "
+              "assessment stats <item_id>[|<version>] | "
+              "assessment blueprint-new <title>|<scope_node>|<scope_type>[|<items>] | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -373,6 +414,152 @@ def main() -> None:
         else:
             raise SystemExit(
                 "Usage: medforge_core tutor start|status|next|answer|end|summary|sessions|targets"
+            )
+    elif cmd == "assessment":
+        # assessment list | assessment blueprints | assessment create <target>|<MODE> |
+        # assessment start <id> | assessment status [id] | assessment next <id> |
+        # assessment answer <id>|<answer>[|<confidence>] | assessment flag <id>|<order>|<reason> |
+        # assessment submit <id> | assessment result <id> | assessment review <id> |
+        # assessment remediate <id> | assessment items [STATUS] |
+        # assessment item-info <item_id>[|<version>] | assessment stats <item_id>[|<version>] |
+        # Accepts both `assessment create bp-1|EXAM` and `assessment list`.
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else ""
+        if action in ("", "list"):
+            print(json.dumps(list_assessments(), indent=2))
+        elif action == "blueprints":
+            print(json.dumps(list_blueprints(), indent=2))
+        elif action == "create":
+            target = parts[1] if len(parts) > 1 else ""
+            if not target:
+                raise SystemExit(
+                    "Usage: medforge_core assessment create <blueprint_id|scope_node>|<MODE>"
+                    "[|<items>[|<minutes>]]"
+                )
+            mode = (parts[2] if len(parts) > 2 and parts[2] else "PRACTICE").upper()
+            count = int(parts[3]) if len(parts) > 3 and parts[3] else None
+            minutes = int(parts[4]) if len(parts) > 4 and parts[4] else None
+            try:
+                result = create_assessment(blueprint_id=target, mode=mode,
+                                           item_count=count, time_limit_minutes=minutes)
+            except ValueError:
+                node = _resolve_scope_node(target)
+                if node is None:
+                    raise SystemExit(
+                        f"No blueprint or curriculum node matches {target!r}."
+                    )
+                scope_type = (node["node_type"].lower()
+                              if node["node_type"].lower() in
+                              ("topic", "seminar", "week", "subject") else "custom")
+                result = create_assessment(
+                    scope_type=scope_type, scope_node_id=node["id"], mode=mode,
+                    item_count=count or 10, time_limit_minutes=minutes,
+                    title=f"{node['node_type']}: {node['title']}",
+                )
+            print(json.dumps(result, indent=2))
+        elif action == "start":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core assessment start <assessment_id>")
+            print(json.dumps(start_assessment(parts[1]), indent=2))
+        elif action == "status":
+            state = (get_assessment_state(parts[1]) if len(parts) > 1 and parts[1]
+                     else resume_assessment())
+            print(json.dumps(state, indent=2))
+        elif action == "next":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core assessment next <assessment_id>")
+            print(json.dumps(next_item(parts[1]), indent=2))
+        elif action == "previous":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core assessment previous <assessment_id>")
+            print(json.dumps(previous_item(parts[1]), indent=2))
+        elif action == "answer":
+            if len(parts) < 3:
+                raise SystemExit(
+                    "Usage: medforge_core assessment answer <assessment_id>|<answer>"
+                    "[|<confidence 0-1>]"
+                )
+            confidence = float(parts[3]) if len(parts) > 3 and parts[3] else None
+            print(json.dumps(submit_assessment_answer(
+                parts[1], parts[2], confidence=confidence), indent=2))
+        elif action == "flag":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core assessment flag <assessment_id>[|<order>][|<reason>]")
+            order = int(parts[2]) if len(parts) > 2 and parts[2] else None
+            reason = parts[3] if len(parts) > 3 and parts[3] else ""
+            print(json.dumps(flag_item(parts[1], order=order, reason=reason), indent=2))
+        elif action == "submit":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core assessment submit <assessment_id>")
+            print(json.dumps(complete_assessment(parts[1]), indent=2))
+        elif action == "result":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core assessment result <assessment_id>")
+            print(json.dumps(get_assessment_result(parts[1]), indent=2))
+        elif action == "review":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core assessment review <assessment_id>")
+            print(json.dumps(review_assessment(parts[1]), indent=2))
+        elif action == "remediate":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core assessment remediate <assessment_id>")
+            print(json.dumps(get_assessment_remediation(parts[1]), indent=2))
+        elif action == "items":
+            status = parts[1].upper() if len(parts) > 1 and parts[1] else None
+            print(json.dumps(list_items(status=status), indent=2))
+        elif action == "item-info":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core assessment item-info <item_id>[|<version>]")
+            version = int(parts[2]) if len(parts) > 2 and parts[2] else None
+            item = get_item(parts[1], version)
+            item["statistics"] = get_item_statistics(parts[1], version)
+            print(json.dumps(item, indent=2))
+        elif action == "stats":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core assessment stats <item_id>[|<version>]")
+            version = int(parts[2]) if len(parts) > 2 and parts[2] else None
+            print(json.dumps(get_item_statistics(parts[1], version), indent=2))
+        elif action == "blueprint-new":
+            if len(parts) < 4:
+                raise SystemExit(
+                    "Usage: medforge_core assessment blueprint-new <title>|<scope_node>"
+                    "|<scope_type>[|<items>]"
+                )
+            node = _resolve_scope_node(parts[2])
+            items = int(parts[4]) if len(parts) > 4 and parts[4] else 10
+            print(json.dumps(create_blueprint(
+                parts[1], scope_type=parts[3].lower(),
+                scope_node_id=node["id"] if node else parts[2], item_count=items,
+            ), indent=2))
+        elif action == "item-new":
+            # item-new <type>|<stem>|<topic>[|<choices a;b;c>][|<correct A>][|<evidence_id>]
+            if len(parts) < 4:
+                raise SystemExit(
+                    "Usage: medforge_core assessment item-new <TYPE>|<stem>|<topic>"
+                    "[|<choices a;b;c>][|<correct A>][|<evidence_id>]"
+                )
+            item_type = parts[1].upper()
+            if item_type not in ASSESSMENT_ITEM_TYPES:
+                raise SystemExit(f"item type must be one of {list(ASSESSMENT_ITEM_TYPES)}")
+            choices = [c for c in (parts[4].split(";") if len(parts) > 4 and parts[4] else []) if c]
+            correct = [c for c in (parts[5].split(";") if len(parts) > 5 and parts[5] else []) if c]
+            evidence_id = parts[6] if len(parts) > 6 and parts[6] else ""
+            print(json.dumps(create_item(
+                item_type, parts[2], topic=parts[3], concept=parts[3],
+                choices=choices, correct_choices=correct, correct_answer=correct[0] if correct and not choices else "",
+                evidence_refs=[{"evidence_id": evidence_id}] if evidence_id else [],
+                source_kind="cli",
+            ), indent=2))
+        else:
+            raise SystemExit(
+                "Usage: medforge_core assessment list|blueprints|create|start|status|next|"
+                "previous|answer|flag|submit|result|review|remediate|items|item-info|stats|"
+                "blueprint-new|item-new"
             )
     elif cmd == "migrate":
         with job_lock():

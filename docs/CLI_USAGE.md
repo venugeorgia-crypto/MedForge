@@ -518,16 +518,53 @@ Behaviour worth knowing:
 
 ---
 
+### `medforge assessment "<action>|<args...>"` — Question-Level Assessments
+
+A persistent assessment system (P8): a versioned item bank with evidence
+provenance, blueprints, deterministic selection, timed sessions and per-item
+analytics. Grading reuses the tutor's `evaluate_answer` dispatch; every graded
+answer is recorded through the P6 learner model. Full behaviour:
+`ASSESSMENT.md`.
+
+```bash
+medforge assessment list                        # assessment sessions
+medforge assessment blueprints                  # blueprint inventory
+medforge assessment items                       # item bank inventory
+medforge assessment item-info it-b6c2a183284d   # one item, all versions
+medforge assessment stats it-b6c2a183284d       # item statistics (sample size shown)
+medforge assessment blueprint-new               # guided blueprint creation
+medforge assessment item-new                    # author an item manually
+medforge assessment create bp-b4f59fd8151b      # assessment from blueprint
+medforge assessment start as-895a02d18dea
+medforge assessment status as-895a02d18dea
+medforge assessment next as-895a02d18dea
+medforge assessment previous as-895a02d18dea
+medforge assessment "answer|as-895a02d18dea|A|0.9"   # option key(s) or free text
+medforge assessment "flag|as-895a02d18dea|3"
+medforge assessment submit as-895a02d18dea
+medforge assessment result as-895a02d18dea
+medforge assessment review as-895a02d18dea      # EXAM review, after submission
+medforge assessment remediate as-895a02d18dea   # P6-driven remediation payload
+```
+
+Actions accept pipe (`"answer|<id>|<answer>|<confidence>"`) or space-separated
+forms like the tutor command. In EXAM mode feedback is withheld until
+submission; timing is server-side (`expires_at`), so a client cannot extend a
+time limit.
+
+---
+
 ### `medforge migrate` — Run V3 Migration
 
 Explicitly run the V3 database migration (normally auto-run on first use).
-V4–V8 migrations (curriculum, textbook provenance, evidence graph,
-recency-weighted learner model, interactive tutor) run automatically on first
-use of their feature, or explicitly via their runners:
+V4–V9 migrations (curriculum, textbook provenance, evidence graph,
+recency-weighted learner model, interactive tutor, assessment engine) run
+automatically on first use of their feature, or explicitly via their runners:
 
 ```bash
 medforge migrate
 .venv-v2.1/bin/python -m core.database.migrate_v8 --db database/medforge.sqlite3
+.venv-v2.1/bin/python -m core.database.migrate_v9 --db database/medforge.sqlite3
 ```
 
 ---
@@ -554,6 +591,8 @@ medforge dashboard
 - **LEARNER** — Recency-weighted mastery, confidence, weaknesses, priority
 - **TUTOR** — Interactive adaptive tutor session (start/resume, teach, ask,
   answer, grade, adapt, summary, evidence expander) — see `TUTOR.md`
+- **ASSESSMENTS** — Item bank, blueprints, assessment sessions, answering,
+  results, review, remediation — see `ASSESSMENT.md`
 - **EVIDENCE** — Claims → evidence → verification trace
 - **LIBRARY** — Upload PDFs
 - **HISTORY** — Browse generated packs
@@ -591,6 +630,7 @@ Automatic search of trusted medical domains (8 results).
 | `MEDFORGE_EMAIL` | (none) | NCBI email for PubMed |
 | `MEDFORGE_OFFLINE` | `0` | Disable network research (also disables tutor model use) |
 | `MEDFORGE_TUTOR_AUTO_MODEL` | `1` | Let the tutor use the local chat model for teaching + free-text grading |
+| `MEDFORGE_ASSESSMENT_AUTO_MODEL` | `1` | Let assessment free-text grading use the local chat model |
 
 ---
 

@@ -538,6 +538,217 @@ CREATE INDEX IF NOT EXISTS idx_tutor_turn_session ON tutor_turns(tutor_session_i
 CREATE INDEX IF NOT EXISTS idx_tutor_turn_attempt ON tutor_turns(attempt_id);
 """
 
+# ─── V9: question-level assessment engine (P8) ───
+# Item identity is separated from immutable per-version content so a historical
+# assessment keeps its exact `item_id + item_version` meaning forever. Sessions
+# are separate from tutor sessions; attempts are the question-level record and
+# the exposure ledger; quality analytics are appended, never destructive.
+ASSESSMENT_ITEM_TYPES = (
+    "MCQ_SINGLE", "MCQ_MULTI", "TRUE_FALSE", "SHORT_ANSWER",
+    "CLINICAL_REASONING", "RECALL",
+)
+ASSESSMENT_ITEM_STATUSES = (
+    "DRAFT", "VALIDATION", "REVIEW_REQUIRED", "APPROVED", "ACTIVE",
+    "RETIRED", "REJECTED",
+)
+ASSESSMENT_MODES = ("PRACTICE", "EXAM", "REVIEW")
+ASSESSMENT_SESSION_STATUSES = (
+    "created", "active", "submitted", "completed", "expired", "abandoned",
+)
+ASSESSMENT_SCOPE_TYPES = ("topic", "seminar", "week", "subject", "custom")
+ASSESSMENT_ITEM_CORRECTNESS = ("correct", "partial", "incorrect", "ungraded")
+ASSESSMENT_BLUEPRINT_STATUSES = ("DRAFT", "ACTIVE", "RETIRED")
+
+_AITYPE_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_ITEM_TYPES)
+_AISTATUS_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_ITEM_STATUSES)
+_AMODE_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_MODES)
+_ASTATUS_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_SESSION_STATUSES)
+_ASCOPE_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_SCOPE_TYPES)
+_ACORRECT_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_ITEM_CORRECTNESS)
+_ABPSTATUS_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_BLUEPRINT_STATUSES)
+
+V9_SCHEMA_DDL = f"""
+-- 1. Assessment item identity + lifecycle (stable item_id)
+CREATE TABLE IF NOT EXISTS assessment_items (
+    item_id TEXT PRIMARY KEY,
+    item_type TEXT NOT NULL CHECK(item_type IN ({_AITYPE_SQL})),
+    status TEXT NOT NULL CHECK(status IN ({_AISTATUS_SQL})),
+    current_version INTEGER NOT NULL DEFAULT 1 CHECK(current_version >= 1),
+    topic TEXT NOT NULL DEFAULT '',
+    mastery_key TEXT NOT NULL DEFAULT '',
+    concept TEXT NOT NULL DEFAULT '',
+    curriculum_node_id TEXT NULL REFERENCES curriculum_nodes(id) ON DELETE SET NULL,
+    author TEXT NOT NULL DEFAULT 'medforge',
+    source_kind TEXT NOT NULL DEFAULT 'manual',
+    generation_mode TEXT NOT NULL DEFAULT 'manual',
+    item_model_version TEXT NOT NULL DEFAULT '',
+    quality_flags TEXT NOT NULL DEFAULT '[]',
+    retired_at TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_assess_item_status ON assessment_items(status, item_type);
+CREATE INDEX IF NOT EXISTS idx_assess_item_key ON assessment_items(mastery_key);
+CREATE INDEX IF NOT EXISTS idx_assess_item_node ON assessment_items(curriculum_node_id);
+
+-- 2. Immutable item content per version (historical reproducibility)
+CREATE TABLE IF NOT EXISTS assessment_item_versions (
+    item_id TEXT NOT NULL REFERENCES assessment_items(item_id) ON DELETE CASCADE,
+    item_version INTEGER NOT NULL CHECK(item_version >= 1),
+    stem TEXT NOT NULL,
+    difficulty_target INTEGER NOT NULL DEFAULT 2 CHECK(difficulty_target >= 1 AND difficulty_target <= 5),
+    choices TEXT NOT NULL DEFAULT '[]',
+    correct_choices TEXT NOT NULL DEFAULT '[]',
+    rubric TEXT NOT NULL DEFAULT '[]',
+    correct_answer TEXT NOT NULL DEFAULT '',
+    explanation TEXT NOT NULL DEFAULT '',
+    scoring_policy TEXT NOT NULL DEFAULT '{{}}',
+    evidence_requirement TEXT NOT NULL DEFAULT 'SUPPORTED',
+    evidence_state TEXT NOT NULL DEFAULT 'INSUFFICIENT_EVIDENCE',
+    evidence_refs TEXT NOT NULL DEFAULT '[]',
+    claim_refs TEXT NOT NULL DEFAULT '[]',
+    content_hash TEXT NOT NULL,
+    validation_report TEXT NOT NULL DEFAULT '{{}}',
+    duplicate_of TEXT NULL,
+    item_model_version TEXT NOT NULL DEFAULT '',
+    review_note TEXT NOT NULL DEFAULT '',
+    author TEXT NOT NULL DEFAULT 'medforge',
+    created_at TEXT NOT NULL,
+    UNIQUE(item_id, item_version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_assess_ver_item ON assessment_item_versions(item_id, item_version);
+CREATE INDEX IF NOT EXISTS idx_assess_ver_hash ON assessment_item_versions(content_hash);
+
+-- 3. Assessment blueprints (deterministic, versioned definition)
+CREATE TABLE IF NOT EXISTS assessment_blueprints (
+    blueprint_id TEXT PRIMARY KEY,
+    blueprint_version INTEGER NOT NULL DEFAULT 1 CHECK(blueprint_version >= 1),
+    title TEXT NOT NULL,
+    scope_type TEXT NOT NULL CHECK(scope_type IN ({_ASCOPE_SQL})),
+    scope_node_id TEXT NULL REFERENCES curriculum_nodes(id) ON DELETE SET NULL,
+    scope_node_ids TEXT NOT NULL DEFAULT '[]',
+    item_count INTEGER NOT NULL CHECK(item_count >= 1 AND item_count <= 500),
+    type_distribution TEXT NOT NULL DEFAULT '{{}}',
+    difficulty_distribution TEXT NOT NULL DEFAULT '{{}}',
+    topic_distribution TEXT NOT NULL DEFAULT '{{}}',
+    prerequisite_coverage REAL NOT NULL DEFAULT 0.0 CHECK(prerequisite_coverage >= 0.0 AND prerequisite_coverage <= 1.0),
+    time_limit_minutes INTEGER NULL CHECK(time_limit_minutes IS NULL OR time_limit_minutes >= 1),
+    pass_threshold REAL NOT NULL DEFAULT 0.70 CHECK(pass_threshold >= 0.0 AND pass_threshold <= 1.0),
+    status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ({_ABPSTATUS_SQL})),
+    validation_report TEXT NOT NULL DEFAULT '{{}}',
+    seed TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_assess_bp_scope ON assessment_blueprints(scope_type, scope_node_id);
+
+-- 4. Assessment sessions (separate from tutor sessions)
+CREATE TABLE IF NOT EXISTS assessment_sessions (
+    assessment_id TEXT PRIMARY KEY,
+    learner_key TEXT NOT NULL DEFAULT 'local',
+    blueprint_id TEXT NULL REFERENCES assessment_blueprints(blueprint_id) ON DELETE SET NULL,
+    blueprint_version INTEGER NULL,
+    title TEXT NOT NULL DEFAULT '',
+    mode TEXT NOT NULL CHECK(mode IN ({_AMODE_SQL})),
+    scope_type TEXT NOT NULL DEFAULT 'topic' CHECK(scope_type IN ({_ASCOPE_SQL})),
+    scope_node_id TEXT NULL,
+    status TEXT NOT NULL CHECK(status IN ({_ASTATUS_SQL})),
+    item_order TEXT NOT NULL DEFAULT '[]',
+    item_count INTEGER NOT NULL DEFAULT 0 CHECK(item_count >= 0),
+    current_index INTEGER NOT NULL DEFAULT 0 CHECK(current_index >= 0),
+    time_limit_minutes INTEGER NULL CHECK(time_limit_minutes IS NULL OR time_limit_minutes >= 1),
+    started_at TEXT NULL,
+    expires_at TEXT NULL,
+    submitted_at TEXT NULL,
+    completed_at TEXT NULL,
+    elapsed_seconds REAL NULL CHECK(elapsed_seconds IS NULL OR elapsed_seconds >= 0.0),
+    raw_score REAL NOT NULL DEFAULT 0.0 CHECK(raw_score >= 0.0),
+    max_score REAL NOT NULL DEFAULT 0.0 CHECK(max_score >= 0.0),
+    percentage REAL NULL CHECK(percentage IS NULL OR (percentage >= 0.0 AND percentage <= 100.0)),
+    pass_threshold REAL NOT NULL DEFAULT 0.70 CHECK(pass_threshold >= 0.0 AND pass_threshold <= 1.0),
+    passed INTEGER NULL CHECK(passed IS NULL OR passed IN (0, 1)),
+    grading_pending INTEGER NOT NULL DEFAULT 0 CHECK(grading_pending >= 0),
+    summary TEXT NOT NULL DEFAULT '{{}}',
+    remediation TEXT NOT NULL DEFAULT '{{}}',
+    model_calls INTEGER NOT NULL DEFAULT 0 CHECK(model_calls >= 0),
+    review_logged INTEGER NOT NULL DEFAULT 0 CHECK(review_logged IN (0, 1)),
+    content_version TEXT NOT NULL DEFAULT '',
+    seed TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_assess_sess_status ON assessment_sessions(status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_assess_sess_key ON assessment_sessions(learner_key);
+CREATE INDEX IF NOT EXISTS idx_assess_sess_bp ON assessment_sessions(blueprint_id);
+
+-- 5. Question-level attempts (append-only answers, retry grading in place)
+CREATE TABLE IF NOT EXISTS assessment_attempts (
+    attempt_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    assessment_id TEXT NOT NULL REFERENCES assessment_sessions(assessment_id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL,
+    item_version INTEGER NOT NULL CHECK(item_version >= 1),
+    question_order INTEGER NOT NULL CHECK(question_order >= 1),
+    stem TEXT NOT NULL DEFAULT '',
+    item_type TEXT NOT NULL DEFAULT '',
+    mastery_key TEXT NOT NULL DEFAULT '',
+    topic TEXT NOT NULL DEFAULT '',
+    difficulty INTEGER NOT NULL DEFAULT 2 CHECK(difficulty >= 1 AND difficulty <= 5),
+    choices TEXT NOT NULL DEFAULT '[]',
+    correct_choices TEXT NOT NULL DEFAULT '[]',
+    rubric TEXT NOT NULL DEFAULT '[]',
+    correct_answer TEXT NOT NULL DEFAULT '',
+    scoring_policy TEXT NOT NULL DEFAULT '{{}}',
+    evidence_refs TEXT NOT NULL DEFAULT '[]',
+    evidence_state TEXT NOT NULL DEFAULT '',
+    presented_at TEXT NULL,
+    answered_at TEXT NULL,
+    learner_answer TEXT NULL,
+    correctness TEXT NULL CHECK(correctness IS NULL OR correctness IN ({_ACORRECT_SQL})),
+    score REAL NULL CHECK(score IS NULL OR (score >= 0.0 AND score <= 1.0)),
+    max_score REAL NOT NULL DEFAULT 1.0 CHECK(max_score > 0.0),
+    confidence REAL NULL CHECK(confidence IS NULL OR (confidence >= 0.0 AND confidence <= 1.0)),
+    response_time_seconds REAL NULL CHECK(response_time_seconds IS NULL OR response_time_seconds >= 0.0),
+    grading_status TEXT NOT NULL DEFAULT 'ungraded' CHECK(grading_status IN ({_GSTATUS_SQL})),
+    grading_source TEXT NOT NULL DEFAULT '',
+    grader_version TEXT NOT NULL DEFAULT '',
+    error_type TEXT NULL,
+    explanation TEXT NOT NULL DEFAULT '',
+    key_points_present TEXT NOT NULL DEFAULT '[]',
+    missing_key_points TEXT NOT NULL DEFAULT '[]',
+    incorrect_points TEXT NOT NULL DEFAULT '[]',
+    grading_history TEXT NOT NULL DEFAULT '[]',
+    grading_attempts INTEGER NOT NULL DEFAULT 0 CHECK(grading_attempts >= 0),
+    flagged INTEGER NOT NULL DEFAULT 0 CHECK(flagged IN (0, 1)),
+    flag_reason TEXT NOT NULL DEFAULT '',
+    injection_suspected INTEGER NOT NULL DEFAULT 0 CHECK(injection_suspected IN (0, 1)),
+    learning_attempt_id INTEGER NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(assessment_id, question_order)
+);
+
+CREATE INDEX IF NOT EXISTS idx_assess_att_session ON assessment_attempts(assessment_id, question_order);
+CREATE INDEX IF NOT EXISTS idx_assess_att_item ON assessment_attempts(item_id, item_version);
+CREATE INDEX IF NOT EXISTS idx_assess_att_answered ON assessment_attempts(answered_at);
+
+-- 6. Item quality analytics (append-only; nothing is auto-deleted)
+CREATE TABLE IF NOT EXISTS assessment_item_quality (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL,
+    item_version INTEGER NOT NULL,
+    sample_size INTEGER NOT NULL DEFAULT 0 CHECK(sample_size >= 0),
+    metrics TEXT NOT NULL DEFAULT '{{}}',
+    flags TEXT NOT NULL DEFAULT '[]',
+    computed_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_assess_quality_item ON assessment_item_quality(item_id, item_version);
+"""
+
 # V3 Schema DDL statements
 V3_SCHEMA_DDL = """
 -- Migration tracking table

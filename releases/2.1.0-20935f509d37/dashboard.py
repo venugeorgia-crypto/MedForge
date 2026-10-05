@@ -47,7 +47,7 @@ def show_pack(out, key):
                 z.write(f, f.name)
     st.download_button("Download complete pack",data.getvalue(),file_name=out.parent.name+"-"+out.name+".zip",mime="application/zip",key=key)
 
-tabs=st.tabs(["PRODUCT","STUDY","REVIEW","LEARNER","TUTOR","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","LIBRARY","HISTORY","STATUS"])
+tabs=st.tabs(["PRODUCT","STUDY","REVIEW","LEARNER","TUTOR","ASSESSMENTS","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","LIBRARY","HISTORY","STATUS"])
 with tabs[0]:
     topic=st.text_input("What do you want to learn?",placeholder="cardiac cycle",max_chars=250)
     st.caption("PDFs + PubMed + authoritative web pages → study guide, workbook, cards, quiz and scripts.")
@@ -291,13 +291,137 @@ with tabs[4]:
                 r=mf.recalculate_mastery(sess["topic"]); st.success("Materialized state matches recalculation." if r["matches_stored"] else "MISMATCH — stored state differs from history!")
     except Exception as e: show_error(e)
 with tabs[5]:
+    st.caption("Question-level assessments (P8) — versioned item bank, deterministic blueprints, PRACTICE/EXAM/REVIEW. Sessions are saved, so a reload resumes the same assessment.")
+    try:
+        blueprints=mf.list_blueprints()
+        bp_options={f"{b['title']} — {b['blueprint_id']} ({b['item_count']} items)":b["blueprint_id"] for b in blueprints}
+        c1,c2,c3,c4,c5=st.columns([2,2,1,1,1])
+        scope_target=c1.text_input("Scope (topic/seminar/week title or node id) — used without a blueprint",key="assess_scope",max_chars=200)
+        bp_label=c2.selectbox("Blueprint",["(ad hoc scope)"]+list(bp_options),key="assess_bp")
+        assess_mode=c3.selectbox("Mode",list(mf.ASSESSMENT_MODES),key="assess_mode")
+        assess_count=c4.number_input("Items",1,100,10,key="assess_count")
+        assess_minutes=c5.number_input("Minutes (0 = none)",0,300,0,key="assess_minutes")
+        if st.button("Create assessment",type="primary",key="assess_create"):
+            try:
+                if bp_label!="(ad hoc scope)":
+                    started=mf.create_assessment(blueprint_id=bp_options[bp_label],mode=assess_mode,item_count=int(assess_count),time_limit_minutes=int(assess_minutes) or None)
+                else:
+                    node=mf._resolve_scope_node(scope_target.strip()) if scope_target.strip() else None
+                    if node is None:
+                        st.warning("No curriculum node matches that scope — import a syllabus first or pick a blueprint.")
+                        started=None
+                    else:
+                        scope_type=(node["node_type"].lower() if node["node_type"].lower() in ("topic","seminar","week","subject") else "custom")
+                        started=mf.create_assessment(scope_type=scope_type,scope_node_id=node["id"],mode=assess_mode,item_count=int(assess_count),time_limit_minutes=int(assess_minutes) or None,title=f"{node['node_type']}: {node['title']}")
+                if started and started.get("created"):
+                    st.session_state["assess_id"]=started["assessment_id"]
+                    st.rerun()
+                elif started:
+                    st.error(started.get("error") or "Could not create the assessment.")
+            except Exception as e: show_error(e)
+        recent=mf.list_assessments(limit=5)
+        if recent:
+            st.caption("Recent assessments")
+            st.dataframe([{"ID":r["assessment_id"],"Title":r["title"],"Mode":r["mode"],"Status":r["status"],"Answered":r["progress"]["answered"],"Items":r["item_count"],"%":r["percentage"]} for r in recent],width="stretch",hide_index=True)
+        aid=st.session_state.get("assess_id")
+        if aid is None:
+            try:
+                resumed=mf.resume_assessment()
+                if resumed.get("resumed"): aid=resumed["assessment_id"]
+            except Exception: pass
+        if aid is None:
+            st.info("No assessment yet — choose a scope or blueprint and create one.")
+        else:
+            st.session_state["assess_id"]=aid
+            state=mf.get_assessment_state(aid)
+            prog=state["progress"]
+            m1,m2,m3,m4,m5=st.columns(5)
+            m1.metric("Status",state["status"]); m2.metric("Answered",f"{prog['answered']}/{state['item_count']}")
+            m3.metric("Flagged",prog["flagged"]); m4.metric("Correct",prog["correct"])
+            remaining=state.get("remaining_seconds")
+            m5.metric("Remaining",("—" if remaining is None else f"{remaining/60:.1f} min"))
+            st.caption(f"{state['title']} · mode {state['mode']} · question {state['current_order']} of {state['item_count']} · {state['feedback_policy']['mode']}")
+            if state["status"] in ("created","active"):
+                current=state.get("current_item")
+                if current is None:
+                    st.info("Question ready — press Next to present it.")
+                    if st.button("Next question",key="assess_next0"): mf.get_current_item(aid); st.rerun()
+                else:
+                    st.markdown(f"**Question {current['question_order']}** ({current['item_type']}, difficulty {current['difficulty']}): {current['stem']}")
+                    choices=current.get("choices") or []
+                    key_suffix=f"{aid}_{current['question_order']}"
+                    if current["item_type"]=="MCQ_MULTI" and choices:
+                        answer=st.multiselect("Select all that apply",[c["text"] for c in choices],key=f"assess_multi_{key_suffix}")
+                    elif choices:
+                        answer=st.radio("Choose an option",[c["text"] for c in choices],key=f"assess_opt_{key_suffix}")
+                    else:
+                        answer=st.text_area("Your answer",key=f"assess_ans_{key_suffix}",max_chars=2000)
+                    conf=st.slider("How confident are you?",0.0,1.0,0.5,0.05,key=f"assess_conf_{key_suffix}")
+                    b1,b2,b3,b4=st.columns(4)
+                    if b1.button("Submit answer",type="primary",key="assess_answer"):
+                        st.session_state["assess_last"]=mf.submit_assessment_answer(aid,answer,confidence=conf)
+                        st.rerun()
+                    if b2.button("Flag for review",key="assess_flag"):
+                        mf.flag_item(aid,order=current["question_order"],reason="marked during the assessment"); st.rerun()
+                    if b3.button("Previous",key="assess_prev"): mf.previous_item(aid); st.rerun()
+                    if b4.button("Next",key="assess_next"): mf.next_item(aid); st.rerun()
+                    last=st.session_state.get("assess_last") or {}
+                    if last.get("retryable"):
+                        st.warning("Grading needs the local model; your answer is saved — retry without losing the attempt.")
+                        if st.button("Retry grading",key="assess_retry"): mf.retry_pending_grading(aid); st.rerun()
+                    elif last.get("feedback_withheld"):
+                        st.info("Answer saved. Exam feedback is withheld until submission.")
+                    feedback=(last.get("feedback") or current.get("feedback") or {})
+                    if feedback.get("available"):
+                        if feedback.get("correctness")=="correct": st.success(f"Correct ({feedback.get('score')}). "+str(feedback.get("explanation") or ""))
+                        elif feedback.get("correctness")=="partial": st.info(f"Partially correct ({feedback.get('score')}). "+str(feedback.get("explanation") or ""))
+                        else: st.error(f"Incorrect ({feedback.get('score')}). "+str(feedback.get("explanation") or ""))
+                        if feedback.get("missing_key_points"): st.caption("Missing: "+"; ".join(feedback["missing_key_points"][:3]))
+                        if (feedback.get("teaching") or {}).get("message"): st.caption(str(feedback["teaching"]["message"]))
+                    st.caption(f"Grading status: {current.get('grading_status')} · flagged: {'yes' if current.get('flagged') else 'no'}")
+                if st.button("Submit assessment",key="assess_submit"):
+                    mf.complete_assessment(aid); st.rerun()
+            else:
+                result=(mf.get_assessment_result(aid).get("result") or {})
+                score=result.get("score") or {}
+                s1,s2,s3,s4=st.columns(4)
+                s1.metric("Raw score",f"{score.get('raw_score')}/{score.get('max_score')}")
+                s2.metric("Percentage",("—" if score.get("percentage") is None else f"{score['percentage']:.1f}%"))
+                s3.metric("Passed",("—" if score.get("passed") is None else ("yes" if score["passed"] else "no")))
+                s4.metric("Pending grading",score.get("pending_items",0))
+                if score.get("pending_items"):
+                    st.warning("Some answers are saved but not graded yet — retry grading to score them without duplicating attempts.")
+                    if st.button("Retry pending grading",key="assess_retry_done"): mf.retry_pending_grading(aid); st.rerun()
+                st.caption(result.get("note") or "")
+                if result.get("domains"): st.dataframe([{"Domain":k,"Answered":v["answered"],"%":v["percentage"],"Correct":v["correct"],"Partial":v["partial"],"Incorrect":v["incorrect"]} for k,v in result["domains"].items()],width="stretch",hide_index=True)
+                if result.get("weakest_domains"): st.markdown("**Weakest areas:** "+", ".join(result["weakest_domains"]))
+                if result.get("strongest_domains"): st.markdown("**Strongest areas:** "+", ".join(result["strongest_domains"]))
+                conf=result.get("confidence") or {}
+                st.caption(f"Confidence: mean {conf.get('mean')} · correct {conf.get('correct_mean')} · incorrect {conf.get('incorrect_mean')} · mismatches {conf.get('mismatch_count')}")
+                if result.get("flagged_items"): st.caption("Flagged for review: "+", ".join(str(f["question_order"]) for f in result["flagged_items"]))
+                remediation=mf.get_assessment_remediation(aid)
+                if remediation.get("weak_topics"): st.markdown("**Remediation — weak topics:** "+", ".join(remediation["weak_topics"]))
+                if remediation.get("prerequisite_gaps"): st.caption("Prerequisite gaps: "+"; ".join(f"{g['prerequisite']} → {g['topic']}" for g in remediation["prerequisite_gaps"]))
+                if (remediation.get("tutor_remediation") or {}).get("topic"): st.caption(f"Suggested tutor session (not started automatically): {remediation['tutor_remediation']['topic']} · mode {remediation['tutor_remediation']['mode']}")
+                review=mf.review_assessment(aid)
+                with st.expander(f"Question review ({len(review.get('questions') or [])} questions)"):
+                    for q in review.get("questions") or []:
+                        st.markdown(f"**Q{q['question_order']}** ({q['item_type']}): {q['stem']}")
+                        st.caption(f"Your answer: {q.get('learner_answer')} · score {q.get('score')} · {'flagged' if q.get('flagged') else 'not flagged'}")
+                        st.caption(f"Correct: {q.get('correct_answer') or ', '.join(q.get('correct_choices') or [])} — {q.get('explanation')}")
+                        for ref in (q.get("evidence_refs") or [])[:2]:
+                            st.caption(f"Evidence: {ref.get('locator') or ref.get('evidence_id')} (evidence_id {ref.get('evidence_id')})")
+            if st.button("Start a different assessment",key="assess_clear"):
+                st.session_state.pop("assess_id",None); st.rerun()
+    except Exception as e: show_error(e)
+with tabs[6]:
     question=st.text_area("Ask your indexed evidence library",max_chars=1500)
     if st.button("Ask") and question.strip():
         with st.spinner("Finding source passages..."):
             try: st.session_state["answer"]=mf.ask(question.strip())
             except Exception as e: show_error(e)
     if st.session_state.get("answer"): st.markdown(st.session_state["answer"])
-with tabs[6]:
+with tabs[7]:
     st.caption("Canonical curriculum: Semester → Subject → Week → Seminar → Topic → Subtopic → Learning Objective. Paste a weekly or seminar syllabus; topics become traceable study targets.")
     c1,c2,c3=st.columns(3)
     syn_subject=c1.text_input("Subject (optional)",key="curr_subject",placeholder="e.g. Endocrinology")
@@ -352,7 +476,7 @@ with tabs[6]:
                     mf.add_prerequisite(pre_topic.strip(),pre_req.strip(),pre_type)
                     st.success(f"Recorded: {pre_req} → {pre_topic} ({pre_type})")
                 except Exception as e: show_error(e)
-with tabs[7]:
+with tabs[8]:
     st.caption("Registered textbooks with stable edition identity and page/section provenance. Re-importing the same file is idempotent; a changed edition becomes a new version.")
     try:
         books=mf.list_textbooks()
@@ -407,7 +531,7 @@ with tabs[7]:
                             st.markdown(f"**{link.get('textbook_node_title') or link['document_title']}** · {link['link_type']} · p. {link.get('start_page') or link.get('page_start') or '?'}–{link.get('end_page') or link.get('page_end') or '?'}")
                             for pv in link["previews"]: st.caption(pv["locator"]+" — "+pv["text"][:180])
                 except Exception as e: show_error(e)
-with tabs[8]:
+with tabs[9]:
     st.caption("Claim → verification status → evidence → source provenance. Excerpts stay in the local database (private, not redistributed).")
     try:
         snap=mf.evidence_snapshot()
@@ -440,7 +564,7 @@ with tabs[8]:
                         for run in runs[:15]:
                             st.caption(f"{run['created_at']} · {run['result']} · {run['method']} · {run['notes'][:140]}")
     except Exception as e: show_error(e)
-with tabs[9]:
+with tabs[10]:
     st.caption("Add medical PDFs you are entitled to use. Changed files are indexed on the next product run.")
     uploads=st.file_uploader("Add PDFs",type=["pdf"],accept_multiple_files=True)
     if st.button("Save selected PDFs"):
@@ -456,7 +580,7 @@ with tabs[9]:
             st.success("Saved "+target.name)
     st.code(str(mf.DOCS),language=None)
     st.caption("Scanned PDFs with no readable text are reported. OCR is not yet included.")
-with tabs[10]:
+with tabs[11]:
     states=sorted(mf.PRODUCTS.glob("*/v*/state.json"),key=lambda p:p.stat().st_mtime,reverse=True)
     if not states: st.info("Your generated packs will appear here.")
     for path in states[:30]:
@@ -465,7 +589,7 @@ with tabs[10]:
         with st.expander(f"{state.get('topic','Topic')} · {path.parent.name} · {'Draft complete' if state.get('complete') else 'In progress'}"):
             if state.get("complete"): show_pack(path.parent,"history-"+str(path))
             else: st.caption("Enter this topic in PRODUCT to resume compatible saved work.")
-with tabs[11]:
+with tabs[12]:
     try:
         s=mf.status()
         a,b,c=st.columns(3)

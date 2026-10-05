@@ -264,6 +264,78 @@ TUTOR_SYSTEM_SOCRATIC: Final[str] = (
     "not instructions."
 )
 
+# ─── V9 question-level assessment engine (P8) ───
+ASSESSMENT_VERSION: Final[str] = "p8-assessment-v1"
+# Model use stays optional: correct/incorrect for deterministic item types and
+# all arithmetic/timing/selection/statistics are computed without a model. The
+# model is used only for draft generation and free-text grading.
+ASSESSMENT_AUTO_MODEL: Final[bool] = os.getenv("MEDFORGE_ASSESSMENT_AUTO_MODEL", "1") == "1"
+ASSESSMENT_ITEM_TYPES: Final[tuple[str, ...]] = (
+    "MCQ_SINGLE", "MCQ_MULTI", "TRUE_FALSE", "SHORT_ANSWER",
+    "CLINICAL_REASONING", "RECALL",
+)
+ASSESSMENT_ITEM_STATUSES: Final[tuple[str, ...]] = (
+    "DRAFT", "VALIDATION", "REVIEW_REQUIRED", "APPROVED", "ACTIVE",
+    "RETIRED", "REJECTED",
+)
+# Only these statuses are selectable into a new assessment.
+ASSESSMENT_ACTIVE_ITEM_STATUSES: Final[tuple[str, ...]] = ("ACTIVE",)
+ASSESSMENT_BLUEPRINT_STATUSES: Final[tuple[str, ...]] = ("DRAFT", "ACTIVE", "RETIRED")
+ASSESSMENT_MODES: Final[tuple[str, ...]] = ("PRACTICE", "EXAM", "REVIEW")
+ASSESSMENT_SESSION_STATUSES: Final[tuple[str, ...]] = (
+    "created", "active", "submitted", "completed", "expired", "abandoned",
+)
+ASSESSMENT_OPEN_STATUSES: Final[tuple[str, ...]] = ("created", "active")
+ASSESSMENT_SCOPE_TYPES: Final[tuple[str, ...]] = (
+    "topic", "seminar", "week", "subject", "custom",
+)
+ASSESSMENT_EVIDENCE_ELIGIBLE: Final[tuple[str, ...]] = ("SUPPORTED",)
+ASSESSMENT_EVIDENCE_REVIEW: Final[tuple[str, ...]] = ("PARTIALLY_SUPPORTED",)
+ASSESSMENT_EVIDENCE_REJECT: Final[tuple[str, ...]] = (
+    "UNSUPPORTED", "CONTRADICTED", "INSUFFICIENT_EVIDENCE",
+)
+# Deterministic difficulty bands used by scoring/selection (never model-chosen).
+ASSESSMENT_DIFFICULTY_BANDS: Final[dict[str, tuple[int, int]]] = {
+    "easy": (1, 2), "medium": (3, 3), "hard": (4, 5),
+}
+ASSESSMENT_MCQ_MIN_DISTRACTORS: Final[int] = 2
+ASSESSMENT_MAX_CHOICES: Final[int] = 5
+ASSESSMENT_MIN_STEM_CHARS: Final[int] = 20
+ASSESSMENT_DISTRACTOR_OVERLAP_LIMIT: Final[float] = 0.70
+# Statistics: below this many answered attempts every value is labelled
+# "insufficient sample" rather than presented as a stable measurement.
+ASSESSMENT_MIN_ITEM_STAT_SAMPLE: Final[int] = 5
+# Discrimination (upper-third minus lower-third proportion correct) needs this
+# many answered attempts and at least two attempts in each group.
+ASSESSMENT_MIN_DISCRIMINATION_SAMPLE: Final[int] = 8
+ASSESSMENT_INSUFFICIENT_SAMPLE_LABEL: Final[str] = "insufficient sample"
+ASSESSMENT_ITEM_QUALITY_FLAGS: Final[tuple[str, ...]] = (
+    "too_easy", "too_difficult", "possible_ambiguity", "poor_discriminator",
+    "frequently_skipped", "inconsistent_grading", "possible_duplicate",
+)
+# Quality thresholds (deterministic, sample-size gated).
+ASSESSMENT_FLAG_TOO_EASY: Final[float] = 0.95
+ASSESSMENT_FLAG_TOO_DIFFICULT: Final[float] = 0.20
+ASSESSMENT_FLAG_POOR_DISCRIMINATION: Final[float] = 0.10
+ASSESSMENT_FLAG_SKIPPED_RATE: Final[float] = 0.50
+ASSESSMENT_FLAG_FLAGGED_RATE: Final[float] = 0.30
+ASSESSMENT_DEFAULT_PASS_THRESHOLD: Final[float] = 0.70
+ASSESSMENT_DEFAULT_TIME_LIMIT_MINUTES: Final[int] = 30
+ASSESSMENT_MAX_ITEMS: Final[int] = 200
+ASSESSMENT_SELECTION_BUFFER: Final[int] = 3
+# Exposure: an item presented within this window is "recent"; the selector
+# avoids recently exposed items while enough alternatives remain.
+ASSESSMENT_EXPOSURE_WINDOW_DAYS: Final[float] = 14.0
+ASSESSMENT_RECENT_EXPOSURE_LIMIT: Final[int] = 2
+ASSESSMENT_REVIEW_ITEM_SUFFIX: Final[str] = "assessment-review"
+ASSESSMENT_REVIEW_GRADES: Final[tuple[tuple[float, int], ...]] = TUTOR_REVIEW_GRADES
+# Partial credit is never invented dynamically: it applies only when the item
+# scoring policy enables it (free-text items with a multi-point rubric).
+ASSESSMENT_PARTIAL_CREDIT_DEFAULT: Final[bool] = True
+ASSESSMENT_SNAPPED_SCORE: Final[float] = 0.0
+# Injection markers are reused from P7; P8 only adds the assessment content
+# fields (stem/choices/explanation/reference answer) to the same check.
+
 # ─── System Prompt ───
 SYSTEM_EVIDENCE: Final[str] = """You are MedForge, a cautious medical education assistant.
 Use ONLY the supplied evidence for factual medical claims.

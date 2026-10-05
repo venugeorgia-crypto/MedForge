@@ -333,6 +333,37 @@ USER TOPIC
 - Session summaries sync one spaced-repetition review through the existing
   `review_card` interface; SM-2/FSRS math stays in `learner.py`.
 
+### Assessment Integration (P8, V9)
+- The item bank is **versioned**: `assessment_items` holds identity +
+  lifecycle, `assessment_item_versions` holds immutable content per
+  `(item_id, item_version)`. A material change (wording, answer, rubric,
+  evidence basis) creates a new version — old versions are never mutated, so
+  historical assessments replay exactly.
+- Every medically substantive item carries a P4 evidence basis: `evidence_refs`
+  + `claim_refs` captured from P3/P4 rows and an `evidence_state` computed by
+  `tutor.assess_evidence`. `approve_item()` refuses `UNSUPPORTED`,
+  `CONTRADICTED` or `INSUFFICIENT_EVIDENCE` items; `PARTIALLY_SUPPORTED` needs
+  an explicit recorded review. Generation creates DRAFTs only — approval is a
+  separate, explicit gate.
+- Grading reuses P7's `evaluate_answer` dispatch; the only addition is the
+  deterministic `grade_multi_select` scorer beside `grade_mcq` for `MCQ_MULTI`
+  items governed by item-level scoring policy. There is no second grading
+  engine.
+- Assessment sessions live in `assessment_sessions` (separate from
+  `tutor_sessions`). Each attempt row persists the presented item snapshot
+  (stem, choices, rubric, evidence refs), so later item edits cannot change a
+  historical attempt. Graded answers are never overwritten; retryable answers
+  are re-graded in place with `grading_history` appended.
+- Timing, selection, scoring and statistics are deterministic and model-free:
+  server-side `started_at`/`expires_at`, seeded stable selection with
+  reported relaxations, transparent statistics that always carry `sample_size`
+  ("insufficient sample" below the floor). This is lightweight reporting, not
+  validated psychometrics.
+- Learner evidence flows only through `record_learning_event` (one event per
+  attempt, guarded by `learning_attempt_id`); remediation reads P6 weakness/
+  priority signals and returns a proposal with `launch: false` — starting a
+  tutor session is always an explicit learner action.
+
 ---
 
 ## Deployment Architecture
