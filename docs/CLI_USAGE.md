@@ -27,7 +27,8 @@ Commands: `product`, `ask`, `study`, `study-log`, `mastery [topic]`, `learner`,
 `weaknesses`, `history`, `recalculate`, `study-priority`, `due`, `review`,
 `import-cards`, `syllabus`, `curriculum`, `path`, `prereq`, `textbooks`,
 `textbook-add`, `textbook-info`, `textbook-link`, `textbook-evidence`, `claims`,
-`claim-info`, `verify-pack`, `evidence-status`, `migrate`, `doctor`, `status`.
+`claim-info`, `verify-pack`, `evidence-status`, `tutor`, `migrate`, `doctor`,
+`status`.
 
 ### `medforge product <topic>` — Generate Study Pack
 
@@ -482,12 +483,51 @@ medforge evidence-status
 
 ---
 
+### `medforge tutor "<action>|<args...>"` — Interactive Adaptive Tutor
+
+A persistent teaching loop (P7): P6 picks what to study, P3/P4 supply verified
+evidence, the tutor teaches, asks, grades, explains and adapts, and every graded
+interaction is recorded through the P6 learner model. Sessions survive a
+refresh, a new CLI process or a rebuild. Full behaviour: `TUTOR.md`.
+
+```bash
+medforge tutor targets                          # P6 recommendation + reason
+medforge tutor "start|Growth Hormone Physiology|explain|quick"
+medforge tutor start "Growth Plate Physiology"  # spaced form works too
+medforge tutor status                           # resume newest session
+medforge tutor "answer|1|GHRH and somatostatin control GH release.|0.8"
+medforge tutor next 1
+medforge tutor summary 1
+medforge tutor end 1
+medforge tutor sessions
+```
+
+Modes: `explain`, `socratic`, `drill`, `correct`, `case`, `review`,
+`prerequisite_repair` (blank/`auto` = chosen from the target). Goals: `quick`
+(3 interactions), `10min` (5), `20min` (8), `30min` (12) or a raw count. Answers
+with spaces work in the pipe form; `|` separates the confidence (0–1).
+
+Behaviour worth knowing:
+- a topic with insufficient evidence **abstains** (a `blocked` session is stored
+  with the reason) instead of inventing content;
+- model-assisted teaching/grading uses the local chat model automatically
+  (`MEDFORGE_TUTOR_AUTO_MODEL=0` to disable); a model failure keeps the answer
+  and marks the turn retryable — resubmit to grade it;
+- a completed session cannot be answered again, and a stale resubmit returns
+  `already_graded` without a second learning event.
+
+---
+
 ### `medforge migrate` — Run V3 Migration
 
 Explicitly run the V3 database migration (normally auto-run on first use).
+V4–V8 migrations (curriculum, textbook provenance, evidence graph,
+recency-weighted learner model, interactive tutor) run automatically on first
+use of their feature, or explicitly via their runners:
 
 ```bash
 medforge migrate
+.venv-v2.1/bin/python -m core.database.migrate_v8 --db database/medforge.sqlite3
 ```
 
 ---
@@ -511,6 +551,10 @@ medforge dashboard
 - **TEXTBOOKS** — Register/ingest textbooks, inspect editions + chapters +
   page provenance, link curriculum topics to textbook evidence, discover
   linked sources (see `TEXTBOOKS.md`)
+- **LEARNER** — Recency-weighted mastery, confidence, weaknesses, priority
+- **TUTOR** — Interactive adaptive tutor session (start/resume, teach, ask,
+  answer, grade, adapt, summary, evidence expander) — see `TUTOR.md`
+- **EVIDENCE** — Claims → evidence → verification trace
 - **LIBRARY** — Upload PDFs
 - **HISTORY** — Browse generated packs
 - **STATUS** — System health
@@ -545,7 +589,8 @@ Automatic search of trusted medical domains (8 results).
 | `MEDFORGE_EMBED_MODEL` | `embeddinggemma` | Embedding model |
 | `MEDFORGE_MODEL` | (auto) | Preferred chat model |
 | `MEDFORGE_EMAIL` | (none) | NCBI email for PubMed |
-| `MEDFORGE_OFFLINE` | `0` | Disable network research |
+| `MEDFORGE_OFFLINE` | `0` | Disable network research (also disables tutor model use) |
+| `MEDFORGE_TUTOR_AUTO_MODEL` | `1` | Let the tutor use the local chat model for teaching + free-text grading |
 
 ---
 

@@ -25,6 +25,8 @@ from medforge import (  # noqa: E402
     TRUSTED_DOMAINS, NODE_TYPES, PREREQUISITE_TYPES, WEAKNESS_SEVERITY, SESSION_TYPES,
     SPACED_REPETITION_STATES, SPACED_REPETITION_ITEM_TYPES, MEDICAL_PUBLICATION_TYPES,
     SYSTEM_EVIDENCE,
+    TUTOR_SESSION_MODES, TUTOR_SESSION_GOALS, TUTOR_DEFAULT_GOAL,
+    TUTOR_MAX_INTERACTIONS, TUTOR_VERSION,
     init_db, get_collection, upsert_records, migrate_database,
     ensure_v3_tables, start_session, record_session, update_mastery,
     record_weakness, resolve_weakness, log_study_result, learner_snapshot,
@@ -35,6 +37,9 @@ from medforge import (  # noqa: E402
     get_recent_performance,
     get_weaknesses, get_prerequisite_risks, study_priority, detect_weaknesses,
     learner_history, learner_summary,
+    ensure_tutor_tables, start_tutor_session, get_tutor_state, resume_tutor_session,
+    select_tutor_target, next_tutor_step, submit_answer, complete_tutor_session,
+    get_tutor_summary, list_tutor_sessions, public_view,
     hybrid_retrieve, source_pack, keyword_results, vector_results,
     generate_text, citation_audit, parse_tsv_cards,
     write_pdf, make_anki,
@@ -89,6 +94,9 @@ def main() -> None:
               "evidence-status | "
               "learner | mastery <topic> | weaknesses | history <topic> | "
               "recalculate <topic|all> | study-priority | "
+              "tutor start <topic|--recommended>[|mode|goal] (also tutor \"start|<topic>|<mode>|<goal>\") | "
+              "tutor status [id] | tutor next <id> | tutor answer <id>|<answer>|<confidence 0-1> | "
+              "tutor end <id> | tutor summary <id> | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -312,6 +320,60 @@ def main() -> None:
             print(json.dumps(recalculate_mastery(arg.strip()), indent=2))
     elif cmd == "study-priority":
         print(json.dumps(study_priority(), indent=2))
+    elif cmd == "tutor":
+        # tutor start <topic|--recommended>[|mode|goal] | tutor status [id] |
+        # tutor next <id> | tutor answer <id>|<answer>[|<confidence 0-1>] |
+        # tutor end <id> | tutor summary <id> | tutor sessions | tutor targets
+        # Accept both `tutor "start|<topic>|<mode>|<goal>"` and `tutor start <topic>`:
+        # the first token is always the action, the rest is pipe-delimited payload.
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else ""
+        if action == "start":
+            target = parts[1] if len(parts) > 1 else ""
+            mode = parts[2] if len(parts) > 2 and parts[2] else None
+            goal = parts[3] if len(parts) > 3 and parts[3] else None
+            if not target:
+                raise SystemExit(
+                    "Usage: medforge_core tutor start <topic>|--recommended[|mode|goal]"
+                )
+            topic = None if target.lower() in ("--recommended", "recommended") else target
+            print(json.dumps(start_tutor_session(topic, mode=mode, goal=goal), indent=2))
+        elif action == "status":
+            state = get_tutor_state(int(parts[1])) if len(parts) > 1 else resume_tutor_session()
+            print(json.dumps(state, indent=2))
+        elif action == "targets":
+            print(json.dumps(select_tutor_target(), indent=2))
+        elif action == "sessions":
+            print(json.dumps(list_tutor_sessions(), indent=2))
+        elif action == "next":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core tutor next <session_id>")
+            print(json.dumps(next_tutor_step(int(parts[1])), indent=2))
+        elif action == "answer":
+            if len(parts) < 3:
+                raise SystemExit(
+                    "Usage: medforge_core tutor answer <session_id>|<answer>[|<confidence 0-1>]"
+                )
+            confidence = float(parts[3]) if len(parts) > 3 and parts[3] else None
+            print(json.dumps(submit_answer(int(parts[1]), parts[2], confidence=confidence), indent=2))
+        elif action == "end":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core tutor end <session_id>")
+            print(json.dumps(complete_tutor_session(
+                int(parts[1]), reason="learner ended the session"), indent=2))
+        elif action == "summary":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core tutor summary <session_id>")
+            print(json.dumps(get_tutor_summary(int(parts[1])), indent=2))
+        else:
+            raise SystemExit(
+                "Usage: medforge_core tutor start|status|next|answer|end|summary|sessions|targets"
+            )
     elif cmd == "migrate":
         with job_lock():
             print(json.dumps(migrate_database(), indent=2))

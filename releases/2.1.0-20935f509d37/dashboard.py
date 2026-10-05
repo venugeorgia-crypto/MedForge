@@ -47,7 +47,7 @@ def show_pack(out, key):
                 z.write(f, f.name)
     st.download_button("Download complete pack",data.getvalue(),file_name=out.parent.name+"-"+out.name+".zip",mime="application/zip",key=key)
 
-tabs=st.tabs(["PRODUCT","STUDY","REVIEW","LEARNER","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","LIBRARY","HISTORY","STATUS"])
+tabs=st.tabs(["PRODUCT","STUDY","REVIEW","LEARNER","TUTOR","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","LIBRARY","HISTORY","STATUS"])
 with tabs[0]:
     topic=st.text_input("What do you want to learn?",placeholder="cardiac cycle",max_chars=250)
     st.caption("PDFs + PubMed + authoritative web pages → study guide, workbook, cards, quiz and scripts.")
@@ -224,13 +224,80 @@ with tabs[3]:
                     st.success("Materialized state matches recalculation." if r["matches_stored"] else "MISMATCH — stored state differs from history!")
     except Exception as e: show_error(e)
 with tabs[4]:
+    st.caption("Interactive adaptive tutor (P7) — P6 learner state + P4 evidence. Sessions are saved, so a refresh resumes the same session.")
+    try:
+        c1,c2,c3,c4=st.columns([2,1,1,1])
+        tutor_topic=c1.text_input("Topic (blank = recommended)",key="tutor_topic",max_chars=200)
+        tutor_mode=c2.selectbox("Mode",["auto"]+list(mf.TUTOR_SESSION_MODES),key="tutor_mode")
+        tutor_goal=c3.selectbox("Session goal",list(mf.TUTOR_SESSION_GOALS),key="tutor_goal")
+        if c4.button("Start session",key="tutor_start"):
+            started=mf.start_tutor_session(tutor_topic.strip() or None,mode=None if tutor_mode=="auto" else tutor_mode,goal=tutor_goal)
+            st.session_state["tutor_session_id"]=started["session_id"]
+            st.rerun()
+        if st.session_state.get("tutor_session_id") is None:
+            try: st.session_state["tutor_session_id"]=mf.resume_tutor_session()["session"]["tutor_session_id"]
+            except Exception: pass
+        sid=st.session_state.get("tutor_session_id")
+        if sid is None:
+            st.info("No tutor session yet — choose a topic (or leave blank for the recommended one) and start.")
+        else:
+            state=mf.get_tutor_state(sid); sess=state["session"]; prog=state["progress"]
+            st.markdown("**Objective:** "+sess["session_objective"])
+            m1,m2,m3,m4,m5=st.columns(5)
+            m1.metric("Interactions",f"{prog['interactions']}/{prog['target_interactions']}")
+            m2.metric("Correct",prog["correct"]); m3.metric("Incorrect",prog["incorrect"])
+            m4.metric("Difficulty",prog["difficulty"]); m5.metric("Status",sess["status"])
+            st.caption(f"Topic {sess['topic']} · mode {sess['mode']} · stage {sess['stage']} · evidence {len(state['evidence_rows'])} item(s) · {state['assessment']['status']}")
+            if state["assessment"]["status"]!="SUPPORTED":
+                st.warning(state["policy"]["message"])
+            if sess.get("current_explanation"):
+                st.markdown("**Teaching**"); st.markdown(sess["current_explanation"])
+            if sess["status"] in ("completed","aborted"):
+                st.markdown("**Session summary**"); st.json(mf.get_tutor_summary(sid))
+            else:
+                q=state["question"]
+                if q is None:
+                    if st.button("Prepare next step",key="tutor_next"):
+                        mf.next_tutor_step(sid); st.rerun()
+                else:
+                    st.markdown(f"**Question {prog['question_number']}** ({q['question_type']}, difficulty {q['difficulty']}): {q['prompt']}")
+                    if q["options"]:
+                        answer=st.radio("Choose an option",q["options"],key=f"tutor_opts_{q['item_id']}")
+                    else:
+                        answer=st.text_area("Your answer",key=f"tutor_ans_{q['item_id']}",max_chars=2000)
+                    conf=st.slider("How confident are you?",0.0,1.0,0.5,0.05,key=f"tutor_conf_{q['item_id']}")
+                    b1,b2=st.columns(2)
+                    if b1.button("Submit answer",key="tutor_submit"):
+                        st.session_state["tutor_last"]=mf.submit_answer(sid,answer,confidence=conf)
+                        st.rerun()
+                    if b2.button("End session",key="tutor_end"):
+                        mf.complete_tutor_session(sid,reason="learner ended the session"); st.rerun()
+                last=st.session_state.get("tutor_last") or {}
+                if last.get("retryable"):
+                    st.warning("Grading needs the local model; your answer is saved — retry when it is available.")
+                    if st.button("Retry grading",key="tutor_retry"): st.rerun()
+                grade=last.get("grade") or {}
+                if grade.get("grading_status")=="graded":
+                    if grade.get("correctness")=="correct": st.success(f"Correct ({grade.get('score')}). "+str(grade.get("explanation") or ""))
+                    elif grade.get("correctness")=="partial": st.info(f"Partially correct ({grade.get('score')}). "+str(grade.get("explanation") or ""))
+                    else: st.error(f"Incorrect ({grade.get('score')}). "+str(grade.get("explanation") or ""))
+                    if grade.get("missing_key_points"): st.caption("Missing: "+"; ".join(grade["missing_key_points"][:3]))
+                adaptation=((last.get("adaptation") or {}).get("reason"))
+                if adaptation: st.caption("Next: "+str(adaptation))
+            with st.expander("Evidence used (private source excerpts)"):
+                for ev in state["evidence_rows"]:
+                    st.caption(f"{ev.get('locator') or ev.get('chunk_id') or ''} — {(ev.get('excerpt') or '')[:220]}")
+            if st.button("Recalculate learner state from history",key="tutor_recalc"):
+                r=mf.recalculate_mastery(sess["topic"]); st.success("Materialized state matches recalculation." if r["matches_stored"] else "MISMATCH — stored state differs from history!")
+    except Exception as e: show_error(e)
+with tabs[5]:
     question=st.text_area("Ask your indexed evidence library",max_chars=1500)
     if st.button("Ask") and question.strip():
         with st.spinner("Finding source passages..."):
             try: st.session_state["answer"]=mf.ask(question.strip())
             except Exception as e: show_error(e)
     if st.session_state.get("answer"): st.markdown(st.session_state["answer"])
-with tabs[5]:
+with tabs[6]:
     st.caption("Canonical curriculum: Semester → Subject → Week → Seminar → Topic → Subtopic → Learning Objective. Paste a weekly or seminar syllabus; topics become traceable study targets.")
     c1,c2,c3=st.columns(3)
     syn_subject=c1.text_input("Subject (optional)",key="curr_subject",placeholder="e.g. Endocrinology")
@@ -285,7 +352,7 @@ with tabs[5]:
                     mf.add_prerequisite(pre_topic.strip(),pre_req.strip(),pre_type)
                     st.success(f"Recorded: {pre_req} → {pre_topic} ({pre_type})")
                 except Exception as e: show_error(e)
-with tabs[6]:
+with tabs[7]:
     st.caption("Registered textbooks with stable edition identity and page/section provenance. Re-importing the same file is idempotent; a changed edition becomes a new version.")
     try:
         books=mf.list_textbooks()
@@ -340,7 +407,7 @@ with tabs[6]:
                             st.markdown(f"**{link.get('textbook_node_title') or link['document_title']}** · {link['link_type']} · p. {link.get('start_page') or link.get('page_start') or '?'}–{link.get('end_page') or link.get('page_end') or '?'}")
                             for pv in link["previews"]: st.caption(pv["locator"]+" — "+pv["text"][:180])
                 except Exception as e: show_error(e)
-with tabs[7]:
+with tabs[8]:
     st.caption("Claim → verification status → evidence → source provenance. Excerpts stay in the local database (private, not redistributed).")
     try:
         snap=mf.evidence_snapshot()
@@ -373,7 +440,7 @@ with tabs[7]:
                         for run in runs[:15]:
                             st.caption(f"{run['created_at']} · {run['result']} · {run['method']} · {run['notes'][:140]}")
     except Exception as e: show_error(e)
-with tabs[8]:
+with tabs[9]:
     st.caption("Add medical PDFs you are entitled to use. Changed files are indexed on the next product run.")
     uploads=st.file_uploader("Add PDFs",type=["pdf"],accept_multiple_files=True)
     if st.button("Save selected PDFs"):
@@ -389,7 +456,7 @@ with tabs[8]:
             st.success("Saved "+target.name)
     st.code(str(mf.DOCS),language=None)
     st.caption("Scanned PDFs with no readable text are reported. OCR is not yet included.")
-with tabs[9]:
+with tabs[10]:
     states=sorted(mf.PRODUCTS.glob("*/v*/state.json"),key=lambda p:p.stat().st_mtime,reverse=True)
     if not states: st.info("Your generated packs will appear here.")
     for path in states[:30]:
@@ -398,7 +465,7 @@ with tabs[9]:
         with st.expander(f"{state.get('topic','Topic')} · {path.parent.name} · {'Draft complete' if state.get('complete') else 'In progress'}"):
             if state.get("complete"): show_pack(path.parent,"history-"+str(path))
             else: st.caption("Enter this topic in PRODUCT to resume compatible saved work.")
-with tabs[10]:
+with tabs[11]:
     try:
         s=mf.status()
         a,b,c=st.columns(3)

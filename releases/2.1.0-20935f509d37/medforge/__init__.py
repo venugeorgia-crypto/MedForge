@@ -44,6 +44,25 @@ from medforge.types import (
     EVIDENCE_TYPES,
     CLAIM_EVIDENCE_RELATIONSHIPS,
     VERIFICATION_RESULTS,
+    TUTOR_VERSION,
+    TUTOR_SESSION_MODES,
+    TUTOR_STAGES,
+    TUTOR_SESSION_STATUSES,
+    TUTOR_SESSION_GOALS,
+    TUTOR_DEFAULT_GOAL,
+    TUTOR_QUESTION_TYPES,
+    TUTOR_CORRECTNESS,
+    TUTOR_GRADING_STATUSES,
+    TUTOR_ERROR_TYPES,
+    TUTOR_PASS_SCORE,
+    TUTOR_MAX_INTERACTIONS,
+    TUTOR_MAX_TURNS,
+    TUTOR_DIFFICULTY_MIN,
+    TUTOR_DIFFICULTY_MAX,
+    TUTOR_LOW_CONFIDENCE,
+    TUTOR_HIGH_CONFIDENCE,
+    TUTOR_OBJECTIVE_MASTERY,
+    TUTOR_OBJECTIVE_RECENT,
 )
 from medforge.utils import (
     mkdirs, sh, slugify, utcnow, atomic_text, job_lock, serialized,
@@ -69,6 +88,13 @@ from medforge.learner_model import (
     get_confidence, get_recent_performance, get_weaknesses,
     get_prerequisite_risks, get_review_priority, study_priority,
     detect_weaknesses, learner_history, learner_summary, curriculum_report,
+)
+from medforge.tutor import (
+    ensure_tutor_tables, start_tutor_session, get_tutor_state, resume_tutor_session,
+    select_tutor_target, generate_teaching_step, generate_question, submit_answer,
+    evaluate_answer, adapt_tutor, record_tutor_learning_event,
+    complete_tutor_session, get_tutor_summary, next_tutor_step, grade_mcq,
+    grade_key_points, grade_free_text, list_tutor_sessions, public_view,
 )
 from medforge.retrieval import (
     hybrid_retrieve, source_pack, keyword_results, vector_results,
@@ -115,6 +141,13 @@ __all__ = [
     "NODE_TYPES", "PREREQUISITE_TYPES", "WEAKNESS_SEVERITY", "SESSION_TYPES",
     "SPACED_REPETITION_STATES", "SPACED_REPETITION_ITEM_TYPES",
     "MEDICAL_PUBLICATION_TYPES", "CURRICULUM_NODE_TYPES", "SYSTEM_EVIDENCE",
+    "TUTOR_VERSION", "TUTOR_SESSION_MODES", "TUTOR_STAGES",
+    "TUTOR_SESSION_STATUSES", "TUTOR_SESSION_GOALS", "TUTOR_DEFAULT_GOAL",
+    "TUTOR_QUESTION_TYPES", "TUTOR_CORRECTNESS", "TUTOR_GRADING_STATUSES",
+    "TUTOR_ERROR_TYPES", "TUTOR_PASS_SCORE", "TUTOR_MAX_INTERACTIONS",
+    "TUTOR_MAX_TURNS", "TUTOR_DIFFICULTY_MIN", "TUTOR_DIFFICULTY_MAX",
+    "TUTOR_LOW_CONFIDENCE", "TUTOR_HIGH_CONFIDENCE",
+    "TUTOR_OBJECTIVE_MASTERY", "TUTOR_OBJECTIVE_RECENT",
     # utils
     "mkdirs", "sh", "slugify", "utcnow", "atomic_text", "job_lock", "serialized",
     "chunks", "batch",
@@ -138,6 +171,13 @@ __all__ = [
     "get_prerequisite_risks", "get_review_priority", "study_priority",
     "detect_weaknesses", "learner_history", "learner_summary",
     "curriculum_report",
+    # interactive adaptive tutor (V8/P7)
+    "ensure_tutor_tables", "start_tutor_session", "get_tutor_state",
+    "resume_tutor_session", "select_tutor_target", "generate_teaching_step",
+    "generate_question", "submit_answer", "evaluate_answer", "adapt_tutor",
+    "record_tutor_learning_event", "complete_tutor_session", "get_tutor_summary",
+    "next_tutor_step", "grade_mcq", "grade_key_points", "grade_free_text",
+    "list_tutor_sessions", "public_view",
     # retrieval
     "hybrid_retrieve", "source_pack", "keyword_results", "vector_results",
     # generation

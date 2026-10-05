@@ -322,7 +322,7 @@ CREATE INDEX IF NOT EXISTS idx_verification_time ON verification_runs(created_at
 # compatibility surface; the recency-weighted estimate lives here.
 LEARNING_ATTEMPT_ITEM_TYPES = ("session", "card", "question", "concept", "topic", "manual")
 LEARNING_ATTEMPT_SOURCES = ("session", "review", "manual", "backfill")
-LEARNER_WEAKNESS_ORIGINS = ("manual", "review", "learner_model")
+LEARNER_WEAKNESS_ORIGINS = ("manual", "review", "learner_model", "tutor")
 
 _ATTEMPT_ITEM_SQL = ", ".join(f"'{v}'" for v in LEARNING_ATTEMPT_ITEM_TYPES)
 _ATTEMPT_SOURCE_SQL = ", ".join(f"'{v}'" for v in LEARNING_ATTEMPT_SOURCES)
@@ -393,6 +393,150 @@ V7_WEAKNESS_COLUMNS: tuple[tuple[str, str], ...] = (
     ("last_failure_at", "TEXT NULL"),
     ("recovered_at", "TEXT NULL"),
 )
+
+# ─── V8: interactive adaptive tutor (P7) ───
+# Sessions are an explicit, persisted stage machine (a refresh/restart resumes
+# from the stored stage, question and pending answer); turns are the append-only
+# transcript and the idempotence key for learning events; questions carry the
+# stable, content-addressed items the tutor asks (P8 extends this later).
+TUTOR_SESSION_MODES = (
+    "explain", "socratic", "drill", "correct", "case", "review",
+    "prerequisite_repair",
+)
+TUTOR_STAGES = (
+    "TEACH", "ASK", "WAITING_FOR_ANSWER", "EVALUATE", "EXPLAIN", "ADAPT",
+    "COMPLETE",
+)
+TUTOR_SESSION_STATUSES = ("active", "waiting", "blocked", "completed", "aborted")
+TUTOR_QUESTION_TYPES = ("mcq", "short_answer", "recall", "clinical_reasoning")
+TUTOR_CORRECTNESS = ("correct", "partial", "incorrect", "ungraded")
+TUTOR_ERROR_TYPES = ("none", "minor", "conceptual", "unknown")
+TUTOR_GRADING_STATUSES = (
+    "graded", "insufficient_evidence", "retryable", "ungraded",
+)
+TUTOR_TURN_KINDS = ("teach", "ask", "answer", "grade", "explain", "adapt", "summary")
+
+_MODE_SQL = ", ".join(f"'{v}'" for v in TUTOR_SESSION_MODES)
+_STAGE_SQL = ", ".join(f"'{v}'" for v in TUTOR_STAGES)
+_STATUS_SQL = ", ".join(f"'{v}'" for v in TUTOR_SESSION_STATUSES)
+_QTYPE_SQL = ", ".join(f"'{v}'" for v in TUTOR_QUESTION_TYPES)
+_CORRECT_SQL = ", ".join(f"'{v}'" for v in TUTOR_CORRECTNESS)
+_ETYPE_SQL = ", ".join(f"'{v}'" for v in TUTOR_ERROR_TYPES)
+_GSTATUS_SQL = ", ".join(f"'{v}'" for v in TUTOR_GRADING_STATUSES)
+_KIND_SQL = ", ".join(f"'{v}'" for v in TUTOR_TURN_KINDS)
+
+V8_SCHEMA_DDL = f"""
+-- 1. Tutor sessions (explicit, restart-surviving stage machine)
+CREATE TABLE IF NOT EXISTS tutor_sessions (
+    tutor_session_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic TEXT NOT NULL,
+    mastery_key TEXT NOT NULL,
+    curriculum_node_id TEXT NULL REFERENCES curriculum_nodes(id) ON DELETE SET NULL,
+    session_objective TEXT NOT NULL DEFAULT '',
+    mode TEXT NOT NULL CHECK(mode IN ({_MODE_SQL})),
+    stage TEXT NOT NULL CHECK(stage IN ({_STAGE_SQL})),
+    status TEXT NOT NULL CHECK(status IN ({_STATUS_SQL})),
+    target_source TEXT NOT NULL DEFAULT 'recommended',
+    target_reason TEXT NOT NULL DEFAULT '',
+    goal TEXT NOT NULL DEFAULT 'quick',
+    target_interactions INTEGER NOT NULL DEFAULT 3 CHECK(target_interactions >= 1),
+    interaction_count INTEGER NOT NULL DEFAULT 0 CHECK(interaction_count >= 0),
+    question_number INTEGER NOT NULL DEFAULT 0 CHECK(question_number >= 0),
+    correct_count INTEGER NOT NULL DEFAULT 0 CHECK(correct_count >= 0),
+    partial_count INTEGER NOT NULL DEFAULT 0 CHECK(partial_count >= 0),
+    incorrect_count INTEGER NOT NULL DEFAULT 0 CHECK(incorrect_count >= 0),
+    difficulty INTEGER NOT NULL DEFAULT 2 CHECK(difficulty >= 1 AND difficulty <= 5),
+    consecutive_failures INTEGER NOT NULL DEFAULT 0 CHECK(consecutive_failures >= 0),
+    consecutive_successes INTEGER NOT NULL DEFAULT 0 CHECK(consecutive_successes >= 0),
+    concept TEXT DEFAULT '',
+    current_question_id TEXT NULL,
+    current_explanation TEXT DEFAULT '',
+    pending_answer TEXT NULL,
+    pending_confidence REAL NULL CHECK(pending_confidence IS NULL OR (pending_confidence >= 0.0 AND pending_confidence <= 1.0)),
+    verification_status TEXT NULL,
+    evidence_refs TEXT DEFAULT '[]',
+    concepts_covered TEXT DEFAULT '[]',
+    prerequisites_visited TEXT DEFAULT '[]',
+    mastery_at_start REAL NULL,
+    confidence_at_start REAL NULL,
+    summary TEXT NULL,
+    model_error TEXT NULL,
+    model_calls INTEGER NOT NULL DEFAULT 0 CHECK(model_calls >= 0),
+    review_recorded INTEGER NOT NULL DEFAULT 0 CHECK(review_recorded IN (0, 1)),
+    tutor_version TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    last_activity_at TEXT NOT NULL,
+    completed_at TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tutor_status ON tutor_sessions(status, last_activity_at);
+CREATE INDEX IF NOT EXISTS idx_tutor_key ON tutor_sessions(mastery_key);
+CREATE INDEX IF NOT EXISTS idx_tutor_node ON tutor_sessions(curriculum_node_id);
+
+-- 2. Tutor questions (stable, content-addressed items; P8 extends later)
+CREATE TABLE IF NOT EXISTS tutor_questions (
+    item_id TEXT PRIMARY KEY,
+    tutor_session_id INTEGER NULL REFERENCES tutor_sessions(tutor_session_id) ON DELETE SET NULL,
+    curriculum_node_id TEXT NULL REFERENCES curriculum_nodes(id) ON DELETE SET NULL,
+    topic TEXT NOT NULL DEFAULT '',
+    mastery_key TEXT NOT NULL DEFAULT '',
+    concept TEXT NOT NULL DEFAULT '',
+    question_type TEXT NOT NULL CHECK(question_type IN ({_QTYPE_SQL})),
+    difficulty INTEGER NOT NULL DEFAULT 2 CHECK(difficulty >= 1 AND difficulty <= 5),
+    prompt TEXT NOT NULL,
+    expected_answer TEXT NOT NULL DEFAULT '',
+    rubric TEXT DEFAULT '[]',
+    options TEXT DEFAULT '[]',
+    correct_option INTEGER NULL,
+    evidence_refs TEXT DEFAULT '[]',
+    verification_status TEXT NOT NULL DEFAULT 'INSUFFICIENT_EVIDENCE',
+    question_version TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tutor_q_session ON tutor_questions(tutor_session_id);
+CREATE INDEX IF NOT EXISTS idx_tutor_q_key ON tutor_questions(mastery_key, concept);
+
+-- 3. Tutor turns (append-only transcript + learning-event idempotence)
+CREATE TABLE IF NOT EXISTS tutor_turns (
+    turn_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tutor_session_id INTEGER NOT NULL REFERENCES tutor_sessions(tutor_session_id) ON DELETE CASCADE,
+    turn_number INTEGER NOT NULL CHECK(turn_number >= 1),
+    kind TEXT NOT NULL CHECK(kind IN ({_KIND_SQL})),
+    stage TEXT NOT NULL DEFAULT '',
+    mode TEXT DEFAULT '',
+    concept TEXT DEFAULT '',
+    question_id TEXT NULL,
+    question_type TEXT DEFAULT '',
+    difficulty INTEGER NULL,
+    prompt TEXT DEFAULT '',
+    expected_answer TEXT DEFAULT '',
+    rubric TEXT DEFAULT '[]',
+    learner_answer TEXT NULL,
+    learner_confidence REAL NULL,
+    score REAL NULL CHECK(score IS NULL OR (score >= 0.0 AND score <= 1.0)),
+    correctness TEXT NULL CHECK(correctness IS NULL OR correctness IN ({_CORRECT_SQL})),
+    error_type TEXT NULL CHECK(error_type IS NULL OR error_type IN ({_ETYPE_SQL})),
+    explanation TEXT DEFAULT '',
+    missing_key_points TEXT DEFAULT '[]',
+    incorrect_points TEXT DEFAULT '[]',
+    evidence_refs TEXT DEFAULT '[]',
+    verification_status TEXT NULL,
+    grading_status TEXT NULL CHECK(grading_status IS NULL OR grading_status IN ({_GSTATUS_SQL})),
+    grading_source TEXT DEFAULT '',
+    injection_suspected INTEGER NOT NULL DEFAULT 0 CHECK(injection_suspected IN (0, 1)),
+    attempt_id INTEGER NULL,
+    misconception_id INTEGER NULL,
+    model_used TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE(tutor_session_id, turn_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tutor_turn_session ON tutor_turns(tutor_session_id, turn_number);
+CREATE INDEX IF NOT EXISTS idx_tutor_turn_attempt ON tutor_turns(attempt_id);
+"""
 
 # V3 Schema DDL statements
 V3_SCHEMA_DDL = """

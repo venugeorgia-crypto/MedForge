@@ -311,6 +311,28 @@ USER TOPIC
   `get_recent_performance`, `get_confidence`, `get_prerequisite_risks`,
   `get_review_priority`
 
+### Tutor Integration (P7, V8)
+- The tutor is a **stateful loop**, not a chat surface: `tutor_sessions` holds
+  the stage machine, the current question, the pending answer and the stored
+  summary, so a refresh or restart resumes the same session. Never keep tutor
+  state in Streamlit session state or module globals.
+- Evidence must be retrieved and persisted **before** teaching: P3
+  curriculum-linked textbook chunks first, bounded retrieval second, each stored
+  through P4 `store_evidence`. Headings are stripped and off-concept rows are
+  excluded, so a retrieval hit from another chapter cannot become this topic's
+  rubric.
+- The tutor never verifies its own output: the P4 status decides whether the
+  tutor teaches, qualifies or abstains. A model call may refine a verdict but
+  never upgrades it.
+- Learner evidence is recorded only through `record_learning_event`; the tutor
+  never writes mastery tables. Each turn stores its `attempt_id`, so a resumed
+  or retried turn cannot duplicate an event.
+- Adaptation (`adapt_tutor`) is a deterministic table over the graded answer,
+  the stored streaks and freshly re-read P6 state; changing it changes tutor
+  behaviour, so it needs a `TUTOR_VERSION` bump and the P7/P8 test suites.
+- Session summaries sync one spaced-repetition review through the existing
+  `review_card` interface; SM-2/FSRS math stays in `learner.py`.
+
 ---
 
 ## Deployment Architecture

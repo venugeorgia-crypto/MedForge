@@ -376,6 +376,37 @@ resolve, optional verified backup at `backups/medforge_pre_v7_backup.db`).
 Rollback: drop the two new tables and leave the additive weakness columns (no
 existing data is touched).
 
+### V8 tutor enums
+`TUTOR_SESSION_MODES` = `('explain', 'socratic', 'drill', 'correct', 'case',
+'review', 'prerequisite_repair')` · `TUTOR_STAGES` = `('TEACH', 'ASK',
+'WAITING_FOR_ANSWER', 'EVALUATE', 'EXPLAIN', 'ADAPT', 'COMPLETE')` ·
+`TUTOR_SESSION_STATUSES` = `('active', 'waiting', 'blocked', 'completed',
+'aborted')` · `TUTOR_QUESTION_TYPES` = `('mcq', 'short_answer', 'recall',
+'clinical_reasoning')` · `TUTOR_CORRECTNESS` = `('correct', 'partial',
+'incorrect', 'ungraded')` · `TUTOR_ERROR_TYPES` = `('none', 'minor',
+'conceptual', 'unknown')` · `TUTOR_GRADING_STATUSES` = `('graded',
+'insufficient_evidence', 'retryable', 'ungraded')`. `LEARNER_WEAKNESS_ORIGINS`
+gains `'tutor'` (tutor-detected misconceptions keep the P6 weakness model).
+
+## V8 Interactive Tutor Tables (migration `8.0.0`)
+
+Purely additive: three new tables plus indexes (no rebuild, no row rewrite, no
+altered column). Session lifecycle, adaptation table, evidence policy and
+failure/recovery behaviour: `docs/TUTOR.md`. Audit + execution record:
+`docs/P7_MATRIX.md`.
+
+| Table | Purpose | Key columns |
+| --- | --- | --- |
+| `tutor_sessions` | One persistent teaching session (restart-surviving) | tutor_session_id (PK), topic, mastery_key, curriculum_node_id FK→curriculum_nodes SET NULL, session_objective, mode, stage, status, target_source, target_reason, goal, target_interactions, interaction_count, question_number, correct/partial/incorrect_count, difficulty (1–5), consecutive_failures/successes, concept, current_question_id, current_explanation, pending_answer, pending_confidence, verification_status, evidence_refs, concepts_covered, prerequisites_visited, mastery_at_start, confidence_at_start, summary, model_error, model_calls, review_recorded, tutor_version, started_at, last_activity_at, completed_at, created_at, updated_at |
+| `tutor_questions` | Content-addressed question items (P8 reuses these) | item_id (PK, sha1[:16]), tutor_session_id FK, curriculum_node_id FK, topic, mastery_key, concept, question_type, difficulty, prompt, expected_answer, rubric (evidence key points + locator), options, correct_option, evidence_refs, verification_status, question_version, created_at |
+| `tutor_turns` | Append-only transcript, one row per teaching/answer/explain/adapt/summary turn | turn_id (PK), tutor_session_id FK CASCADE, turn_number (UNIQUE per session), kind, stage, mode, concept, question_id, question_type, difficulty, prompt, expected_answer, rubric, learner_answer, learner_confidence, score, correctness, error_type, explanation, missing_key_points, incorrect_points, evidence_refs, verification_status, grading_status, grading_source, injection_suspected, attempt_id (P6 learning event), misconception_id, model_used, created_at |
+
+Defined in `core/database/schema.py` (`V8_SCHEMA_DDL`); applied by
+`core/database/migrate_v8.py::ensure_tutor_v8()` (idempotent, self-healing,
+runs V7 → V6 → V5 → V4 first so the curriculum foreign keys resolve, optional
+verified backup at `backups/medforge_pre_v8_backup.db`). Rollback: drop the
+three new tables (no existing data is touched).
+
 ### `PREREQUISITE_TYPES`
 `('strict', 'recommended', 'co-requisite')`
 
