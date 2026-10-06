@@ -116,7 +116,33 @@ Documentation: `docs/ASSESSMENT.md`; audit + execution results: `docs/P8_MATRIX.
 | Assessment sessions + scoring | persistent sessions separate from `tutor_sessions`; attempt snapshot per question; PRACTICE/EXAM/REVIEW modes; server-side timing; deterministic scoring + partial credit | `assessment.py`, `schema.py` (V9) | EXAM withholds feedback until submission; expiry preserves completed attempts; graded answers never overwritten (retryable re-graded in place with `grading_history`) | yes | Low | **DONE** |
 | Item statistics + remediation | transparent stats with `sample_size` ("insufficient sample" < 5; discrimination ≥ 8 with upper/lower thirds); quality flags recorded; P6-driven remediation payload with `launch: false` | `assessment.py::get_item_statistics/compute_item_quality/get_assessment_remediation` | Lightweight reporting, not validated psychometrics; weakness/prerequisite/priority signals read from P6 — no second learner algorithm | yes | Low | **DONE** |
 
-## P9 Spaced learning
+## P9 (this phase) Study intelligence + product factory integration — **IMPLEMENTED (V10)**
+
+Documentation: `docs/STUDY_INTELLIGENCE.md`, `docs/PRODUCT_FACTORY.md`; audit +
+execution results: `docs/P9_MATRIX.md`.
+
+> Numbering note: the original Phase 0 roadmap numbered "P9 = spaced learning"
+> and "P10 = product factory". The delivered P9 phase is the *integration*
+> phase — study intelligence orchestrating P2/P3/P4/P6/P7/P8 plus the canonical
+> product factory — so both appear here. P10 is now publication/approval.
+
+| Requirement | Current | Source file | Actual behavior | Tests | Risk | Verdict |
+|---|---|---|---|---|---|---|
+| Study intelligence layer | `get_study_status`, `recommend_next_action`, `get_knowledge_gaps`, `get_readiness`, `adaptation_profile` | `medforge/study.py` (V10) | Reads P2/P3/P4/P6/P8/SR through public APIs only; derived topic states with centralized thresholds; every recommendation carries machine-readable `reasons` + a WHY sentence | 28 P9 tests | Low | **DONE (`p9-study-v1`)** |
+| Deterministic target + action selection | weighted reason codes (`weakness`, `uncertainty`, `overdue`, `recent_failure`, `prerequisite_impact`, `not_started`, `assessment_gap`, `review_due`) → `NEW_TEACHING/REVIEW/DRILL/PREREQUISITE_REPAIR/TUTOR/ASSESS/REMEDIATION/RECALL/SPACED_REVIEW` | `study.py` | Declining topics use P6's own recency-weighted trend (`<= -0.15`); no second mastery algorithm was written | yes | Low | **DONE** |
+| Persistent reproducible plans + daily plan + time budgets | versioned `study_plans` (re-planning supersedes, never rewrites); `get_today_plan` greedy fit with `did_not_fit` | `study.py`, `schema.py` (V10) | Real per-action durations; actions shortened to fit before being dropped; a 10-minute budget no longer produces an empty day | yes | Low | **DONE** |
+| Missions bound to real engines | `study_missions` stores `tutor_session_id` / `assessment_id`; `launch_mission_engines` re-attaches idempotently | `study.py` → P7/P8 public APIs | Real P7 sessions and real P8 assessments; refusals recorded as honest abstentions, never faked; restart-safe with no duplicated study events | yes | Low | **DONE** |
+| Canonical content model + deterministic rendering | one evidence-cited `content_items` row per (topic, sources, config, prompt, model); 6 artifact types rendered from one fact list | `medforge/content.py` (V10) | Uncited model output is dropped element-by-element; fallback sentences are verbatim evidence; cache key includes the model, so switching models cannot silently reuse another model's output | 23 P9 tests | Low | **DONE (`p9-content-v1`)** |
+| Provenance, checksums, versioning, tamper detection | `content_artifacts` rows + `artifact_provenance` + `content_consistency_report` | `content.py` | artifact → content item → evidence → P3/P4 chain; on-disk sha256 re-verification detects hand-edits; artifact versions accumulate; changed sources produce a new `content_id` (append-only history) | yes | Low | **DONE** |
+| Learner-adapted products | `render_study_products(adaptation=…)` changes emphasis only | `content.py`, `study.py` | Profile read from P6; one file per (type, profile); the canonical item is learner-independent and never rewritten | yes | Low | **DONE** |
+| V10 migration | 5 additive tables (`study_plans`, `study_missions`, `study_actions`, `content_items`, `content_artifacts`) + 8 indexes | `core/database/migrate_v10.py` | Idempotent; verifies integrity + foreign keys; verified backup; live DB 9.0.0 → 10.0.0 with all 438 pre-existing rows preserved | yes | Low | **DONE** |
+| CLI + dashboard surface | `study-intel` / `product-intel`; dashboard STUDY tab = P9 Study Home | `medforge_core.py`, `dashboard.py` | Legacy `study`, `product` and self-study logging untouched; dashboard shows today's budget/plan, gaps, declining topics, recommendation + WHY, mission start | yes | Low | **DONE** |
+
+Still open after this phase (unchanged, not P9 scope): mechanism diagram, OCR,
+PDF tables/callouts, video renderer, provider abstraction, distributable bundle
+— see the rows below.
+
+## P9 Spaced learning (original roadmap numbering)
 
 | Requirement | Current | Source file | Actual behavior | Tests | Risk | Verdict |
 |---|---|---|---|---|---|---|
@@ -125,6 +151,13 @@ Documentation: `docs/ASSESSMENT.md`; audit + execution results: `docs/P8_MATRIX.
 | Leech → revised card generation | leech detection exists (3+ lapses) | `learner.py::review_analytics` | Detection only; no auto-rewrite | yes (detection) | Medium | **PARTIAL** |
 
 ## P10 Product factory / P11 PDF engine / P12 video engine
+
+> P9 added a **canonical** product path beside the legacy one:
+> `content.py` generates one evidence-cited content model and renders six
+> artifact types (study guide, cheat sheet, flashcards, quiz, mind map, script)
+> deterministically from that single fact list, with provenance, checksums and
+> tamper detection. The legacy `product.build_product` ten-artifact path is
+> unchanged and still available; the remaining gaps below are its gaps.
 
 | Requirement | Current | Source file | Actual behavior | Tests | Risk | Verdict |
 |---|---|---|---|---|---|---|
@@ -200,4 +233,6 @@ Documentation: `docs/ASSESSMENT.md`; audit + execution results: `docs/P8_MATRIX.
 | Evidence graph (claims/evidence/relationships/verification history, model-assisted verifier with abstention, contradiction representation, curriculum traceability, CLI + dashboard EVIDENCE tab, V6 migration, tests) | P4 | **DONE** — see `docs/P4_MATRIX.md` execution results and `docs/EVIDENCE.md`; 20 new tests, 94/94 passing; V6 applied to the live DB with verified backup `backups/medforge_pre_v6_backup.db` (pre-existing row counts unchanged; live model-assisted verification run recorded) |
 | Recency-weighted learner model (append-only `learning_attempts`, materialized `learner_model_state`, extended weakness columns, confidence calibration, prerequisite risk API, deterministic study priority, recalculation + versioning, CLI + dashboard LEARNER tab, V7 migration, tests) | P6 | **DONE** — see `docs/P6_MATRIX.md` execution results and `docs/LEARNER_MODEL.md`; 32 new tests, 126/126 passing; V7 applied to the live DB with verified backup `backups/medforge_pre_v7_backup.db` (all pre-existing row counts unchanged, integrity + foreign-key checks clean). Two CLI defects found during end-to-end validation and fixed. |
 | Interactive adaptive tutor (persistent stage machine, P6-driven target selection, evidence-first teaching with verification policy, 7 modes, deterministic + model-assisted grading, adaptation, misconceptions, learner events, session summary, spaced-repetition sync, prompt-injection containment, dashboard TUTOR tab, CLI, V8 migration, tests) | P7 | **DONE** — see `docs/P7_MATRIX.md` execution results and `docs/TUTOR.md`; 37 new tests, 163/163 passing; V8 applied to the live DB with verified backup `backups/medforge_pre_v8_backup.db` (all pre-existing row counts unchanged, integrity + foreign-key checks clean); live end-to-end session, abstention, recovery and dashboard runs recorded. Four real defects found during live validation and fixed (bare-constant crash in model-assisted teaching, `model_calls` undercount, cross-topic rubric contamination, duplicated evidence records). |
-| Source hierarchy (P5), card links + leech rewrite (P9), PDF/OCR upgrade (P11), video renderer (P12), provider abstraction (P13), distributable bundle (P15) | P5–P15 | **NOT STARTED — planned in dependency order; each with its own WHY/WHAT/RISK/MIGRATION/TEST/ROLLBACK record at implementation time. Next: P9 study intelligence / product factory integration (unify curriculum + evidence + learner + tutor + assessment).** |
+| Study intelligence + product factory integration (orchestrator over curriculum/textbook/evidence/learner/tutor/assessment/SR, persistent plans + missions, canonical content + deterministic rendering, V10 migration, CLI + dashboard, tests) | P9 | **DONE** — see `docs/P9_MATRIX.md` execution results, `docs/STUDY_INTELLIGENCE.md` and `docs/PRODUCT_FACTORY.md`; 51 new tests, 261/261 passing; V10 applied to the live DB with verified backup `backups/medforge_pre_v10_backup.db` (40 → 45 tables, 438 → 439 rows, integrity + foreign-key checks clean); isolated end-to-end study loop, learner-adaptation, product-consistency, versioning, recovery, CLI and dashboard runs recorded. Eight real defects found by running the E2E and fixed (nested curriculum node resolution, tutor objective column, tutor goal vocabulary, ungrounded assessment items, empty 10-minute day, model-mode killed by a refs-only citation validator, adaptive re-render filename collision, and the pre-existing `status` command shadowing). |
+| Publication / approval workflow (who may publish what, bundles, approval gates) | P10 | **NOT STARTED — deliberately out of P9 scope. This is the exact next phase.** |
+| Source hierarchy (P5), card links + leech rewrite, PDF/OCR upgrade, video renderer, provider abstraction, distributable bundle | P5–P15 | **NOT STARTED — planned in dependency order; each with its own WHY/WHAT/RISK/MIGRATION/TEST/ROLLBACK record at implementation time.** |

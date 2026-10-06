@@ -160,6 +160,27 @@
 ### 12. `medforge/utils.py` — Shared Utilities
 - Filesystem, locking, hashing, shell, time, decorators
 
+### 13. `medforge/study.py` — Study Intelligence Orchestrator (P9, V10)
+- **Role**: decides what to study next, why, and which engine to use
+- **Inputs**: P2 curriculum, P3/P4 evidence coverage, P6 mastery/priority,
+  spaced repetition due cards, P8 assessment history
+- **Outputs**: topic states, ranked recommendations with `reasons`, versioned
+  plans, daily plans fitted to a minute budget, missions bound to real P7/P8
+  sessions, knowledge gaps, readiness, adaptation profiles, study history
+- **Design rule**: no domain math of its own — it never replaces a mastery,
+  evidence, grading, tutor or assessment engine
+- See `docs/STUDY_INTELLIGENCE.md`
+
+### 14. `medforge/content.py` — Canonical Product Factory (P9, V10)
+- **Role**: one canonical, evidence-cited content model per topic, rendered
+  deterministically into many artifacts
+- **Outputs**: study guide, cheat sheet, flashcards, quiz, mind map, script +
+  `content_artifacts` rows with version, checksum, status and provenance
+- **Design rule**: the LLM is called at most once per
+  (topic, sources, config); every artifact shares that single fact list, and
+  uncited model output is discarded rather than stored
+- See `docs/PRODUCT_FACTORY.md`
+
 ---
 
 ## Data Flow
@@ -363,6 +384,43 @@ USER TOPIC
   attempt, guarded by `learning_attempt_id`); remediation reads P6 weakness/
   priority signals and returns a proposal with `launch: false` — starting a
   tutor session is always an explicit learner action.
+
+### Study Intelligence + Product Factory Integration (P9, V10)
+
+Two modules were added; **no engine was modified**.
+
+- `medforge/study.py` is the orchestrator. It reads P2 curriculum, P3/P4
+  evidence coverage, P6 mastery/weakness/priority, SR due cards and P8
+  assessment history, then decides the next action with machine-readable
+  reasons. It owns no domain logic: it never recomputes mastery, never grades,
+  never re-retrieves evidence, and never edits another engine's tables.
+- `medforge/content.py` is the canonical product factory: one
+  evidence-grounded content model per (topic, sources, config, prompt, model),
+  then deterministic rendering of study guide, cheat sheet, flashcards, quiz,
+  mind map and script from that single fact list, with per-artifact checksums
+  and full provenance.
+- The engines are entered only through their public interfaces:
+  `tutor.start_tutor_session` / `get_tutor_summary`,
+  `assessment.create_assessment` / `get_assessment_result`,
+  `curriculum.curriculum_tree` / `curriculum_progress`,
+  `textbook.textbook_evidence_for_topic`, `learner_model.*`,
+  `retrieval.source_pack`, `learner.*` for the SR queue.
+- Mission ↔ engine coupling is **recorded, not hidden**: a mission stores the
+  P7 session id and/or P8 assessment id it opened. If an engine refuses, the
+  mission records an honest abstention and is still created — mission creation
+  never depends on an engine succeeding.
+- Determinism is the default: selection, scoring, budget fitting, gap
+  detection, readiness, caching, validation and rendering are pure Python. The
+  LLM is used for exactly one canonical generation per
+  (topic, source-set, config).
+- Evidence is never trusted uncited. Model output is validated element by
+  element against the supplied `[S#]` labels; anything uncited is dropped, and
+  if nothing survives the module falls back to deterministic sentences taken
+  verbatim from the evidence.
+- State lives in five additive V10 tables (`study_plans`, `study_missions`,
+  `study_actions`, `content_items`, `content_artifacts`). Missions are
+  restart-safe: engine ids and step results persist, and resuming cannot
+  duplicate study events.
 
 ---
 

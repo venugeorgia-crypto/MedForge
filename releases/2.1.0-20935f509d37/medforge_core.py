@@ -66,6 +66,16 @@ from medforge import (  # noqa: E402
     complete_assessment, get_assessment_result, get_item_statistics,
     get_assessment_remediation, review_assessment, list_assessments,
     ASSESSMENT_ITEM_TYPES, ASSESSMENT_MODES,
+    ensure_study_tables, get_study_status, recommend_next_action,
+    get_knowledge_gaps, get_readiness, build_study_plan, get_plan, list_plans,
+    get_today_plan, start_study_mission, get_mission_state, list_missions,
+    complete_mission_action, complete_mission, harvest_mission_results,
+    launch_mission_engines, get_study_history, adaptation_profile,
+    STUDY_VERSION, PLANNER_VERSION,
+    generate_canonical_content, get_content, list_content,
+    render_study_products, get_product_status, list_artifacts,
+    artifact_provenance, content_consistency_report,
+    CONTENT_VERSION, PROMPT_VERSION,
     mkdirs, sh, slugify, utcnow, atomic_text, job_lock, serialized, chunks, batch,
 )
 
@@ -281,12 +291,14 @@ def main() -> None:
         print(json.dumps(textbook_evidence_for_topic(arg.strip()), indent=2))
     elif cmd == "claims":
         # claims [STATUS] — bounded listing of extracted claims.
-        status = arg.strip().upper() or None
-        if status and status not in CLAIM_VERIFICATION_STATUS:
+        # Named `claim_status` so it does not shadow the legacy `status()`
+        # command (every `main()` local is function-scoped in Python).
+        claim_status = arg.strip().upper() or None
+        if claim_status and claim_status not in CLAIM_VERIFICATION_STATUS:
             raise SystemExit(
                 "STATUS must be one of: " + ", ".join(CLAIM_VERIFICATION_STATUS)
             )
-        print(json.dumps(claims_list(status=status, limit=50), indent=2))
+        print(json.dumps(claims_list(status=claim_status, limit=50), indent=2))
     elif cmd == "claim-info":
         if not arg:
             raise SystemExit("Usage: medforge_core claim-info <claim_id>")
@@ -510,8 +522,8 @@ def main() -> None:
                 raise SystemExit("Usage: medforge_core assessment remediate <assessment_id>")
             print(json.dumps(get_assessment_remediation(parts[1]), indent=2))
         elif action == "items":
-            status = parts[1].upper() if len(parts) > 1 and parts[1] else None
-            print(json.dumps(list_items(status=status), indent=2))
+            item_status = parts[1].upper() if len(parts) > 1 and parts[1] else None
+            print(json.dumps(list_items(status=item_status), indent=2))
         elif action == "item-info":
             if len(parts) < 2:
                 raise SystemExit("Usage: medforge_core assessment item-info <item_id>[|<version>]")
@@ -560,6 +572,161 @@ def main() -> None:
                 "Usage: medforge_core assessment list|blueprints|create|start|status|next|"
                 "previous|answer|flag|submit|result|review|remediate|items|item-info|stats|"
                 "blueprint-new|item-new"
+            )
+    elif cmd == "study-intel":
+        # P9 study intelligence (orchestrator over P2/P3/P4/P6/P7/P8/SR):
+        # study-intel status | recommend [topic][|goal] | gaps | readiness <topic>
+        # study-intel plan [minutes|days|objective] | today [plan_id] |
+        # study-intel start <topic|--recommended> | engines <mission_id> |
+        # study-intel next <mission_id> | complete <mission_id> | finish <mission_id>
+        # study-intel missions [status] | mission <id> | history | profile <topic>
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else "status"
+        if action == "status":
+            print(json.dumps(get_study_status(), indent=2))
+        elif action == "recommend":
+            topic = parts[1] if len(parts) > 1 and parts[1] else None
+            goal = parts[2] if len(parts) > 2 and parts[2] else None
+            print(json.dumps(recommend_next_action(topic=topic, goal=goal), indent=2))
+        elif action == "gaps":
+            print(json.dumps(get_knowledge_gaps(), indent=2))
+        elif action == "readiness":
+            if len(parts) < 2 or not parts[1]:
+                raise SystemExit("Usage: medforge_core study-intel readiness <topic>")
+            print(json.dumps(get_readiness(parts[1]), indent=2))
+        elif action == "profile":
+            if len(parts) < 2 or not parts[1]:
+                raise SystemExit("Usage: medforge_core study-intel profile <topic>")
+            print(json.dumps(adaptation_profile(parts[1]), indent=2))
+        elif action == "plan":
+            # Pipe-delimited like the rest of the CLI: plan <minutes>|<days>|<objective>
+            if len(parts) < 2 or not parts[1]:
+                raise SystemExit(
+                    "Usage: medforge_core study-intel plan <minutes>|<days>|<objective>"
+                )
+            try:
+                minutes = int(parts[1])
+                days = int(parts[2]) if len(parts) > 2 and parts[2] else 1
+            except ValueError:
+                raise SystemExit(
+                    "Usage: medforge_core study-intel plan <minutes>|<days>|<objective>"
+                )
+            objective = parts[3] if len(parts) > 3 and parts[3] else ""
+            print(json.dumps(build_study_plan(daily_minutes=minutes, days=days,
+                                              objective=objective), indent=2))
+        elif action == "today":
+            print(json.dumps(get_today_plan(
+                parts[1] if len(parts) > 1 and parts[1] else None), indent=2))
+        elif action == "start":
+            target = parts[1] if len(parts) > 1 else ""
+            if not target:
+                raise SystemExit(
+                    "Usage: medforge_core study-intel start <topic|--recommended>"
+                )
+            topic = None if target.lower() in ("--recommended", "recommended") else target
+            print(json.dumps(start_study_mission(topic=topic), indent=2))
+        elif action == "engines":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core study-intel engines <mission_id>")
+            print(json.dumps(launch_mission_engines(parts[1]), indent=2))
+        elif action == "next":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core study-intel next <mission_id>")
+            print(json.dumps(get_mission_state(parts[1]), indent=2))
+        elif action == "complete":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core study-intel complete <mission_id>")
+            print(json.dumps(complete_mission_action(parts[1]), indent=2))
+        elif action == "finish":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core study-intel finish <mission_id>")
+            print(json.dumps(complete_mission(parts[1]), indent=2))
+        elif action == "missions":
+            # Avoid binding the name `status` here: it would shadow the legacy
+            # `status()` command in this same function scope.
+            mission_status = parts[1] if len(parts) > 1 and parts[1] else None
+            print(json.dumps(list_missions(status=mission_status), indent=2))
+        elif action == "mission":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core study-intel mission <id>")
+            print(json.dumps(get_mission_state(parts[1]), indent=2))
+        elif action == "history":
+            print(json.dumps(get_study_history(), indent=2))
+        else:
+            raise SystemExit(
+                "Usage: medforge_core study-intel status|recommend|gaps|readiness|"
+                "profile|plan|today|start|engines|next|complete|finish|missions|"
+                "mission|history"
+            )
+    elif cmd == "product-intel":
+        # P9 canonical content + deterministic product rendering:
+        # product-intel build <topic>[|types|outdir] | status <content_id> |
+        # product-intel inspect <content_id> | artifacts [content_id] |
+        # product-intel provenance <artifact_id> | consistency <content_id> |
+        # product-intel regenerate <content_id>[|outdir]
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else ""
+        if action == "build":
+            topic = parts[1] if len(parts) > 1 else ""
+            if not topic:
+                raise SystemExit(
+                    "Usage: medforge_core product-intel build <topic>[|types|outdir]"
+                )
+            artifact_types = [t.strip() for t in parts[2].split(",") if t.strip()] \
+                if len(parts) > 2 and parts[2] else None
+            outdir = Path(parts[3]) if len(parts) > 3 and parts[3] else None
+            try:
+                item = generate_canonical_content(topic)
+            except RuntimeError as exc:
+                # Honest abstention (e.g. no evidence) — data, not a crash.
+                print(json.dumps({"created": False, "refused": str(exc)}, indent=2))
+                return
+            print(json.dumps({
+                "content_id": item["content_id"],
+                "generation_mode": item["generation_mode"],
+                "cached": item["cached"],
+                "render": render_study_products(
+                    item["content_id"], artifact_types=artifact_types, outdir=outdir),
+            }, indent=2))
+        elif action == "status":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core product-intel status <content_id>")
+            print(json.dumps(get_product_status(parts[1]), indent=2))
+        elif action == "inspect":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core product-intel inspect <content_id>")
+            print(json.dumps(get_content(parts[1]), indent=2))
+        elif action in ("artifacts", "list"):
+            cid = parts[1] if len(parts) > 1 and parts[1] else None
+            print(json.dumps(list_artifacts(content_id=cid), indent=2))
+        elif action == "provenance":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core product-intel provenance <artifact_id>")
+            print(json.dumps(artifact_provenance(parts[1]), indent=2))
+        elif action == "consistency":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core product-intel consistency <content_id>")
+            print(json.dumps(content_consistency_report(parts[1]), indent=2))
+        elif action == "regenerate":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core product-intel regenerate <content_id>")
+            outdir = Path(parts[2]) if len(parts) > 2 and parts[2] else None
+            print(json.dumps(render_study_products(
+                parts[1], outdir=outdir), indent=2))
+        else:
+            raise SystemExit(
+                "Usage: medforge_core product-intel build|status|inspect|artifacts|"
+                "provenance|consistency|regenerate"
             )
     elif cmd == "migrate":
         with job_lock():

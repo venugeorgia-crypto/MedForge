@@ -27,8 +27,8 @@ Commands: `product`, `ask`, `study`, `study-log`, `mastery [topic]`, `learner`,
 `weaknesses`, `history`, `recalculate`, `study-priority`, `due`, `review`,
 `import-cards`, `syllabus`, `curriculum`, `path`, `prereq`, `textbooks`,
 `textbook-add`, `textbook-info`, `textbook-link`, `textbook-evidence`, `claims`,
-`claim-info`, `verify-pack`, `evidence-status`, `tutor`, `migrate`, `doctor`,
-`status`.
+`claim-info`, `verify-pack`, `evidence-status`, `tutor`, `assessment`,
+`study-intel`, `product-intel`, `migrate`, `doctor`, `status`.
 
 ### `medforge product <topic>` — Generate Study Pack
 
@@ -554,18 +554,112 @@ time limit.
 
 ---
 
+### `medforge study-intel "<action>|<args...>"` — Study Intelligence (P9)
+
+The orchestrator over P2/P3/P4/P6/P7/P8 + spaced repetition. It decides what to
+study next and **says why**, then launches real engine sessions. See
+`docs/STUDY_INTELLIGENCE.md`.
+
+Actions accept pipe (`"plan|20|1|objective"`) or space-separated forms.
+
+| Action | What it does |
+| --- | --- |
+| `status` | Curriculum tree annotated with mastery, uncertainty, evidence state and derived topic state (`NOT_STARTED … REVIEW_DUE`). |
+| `recommend [topic][|goal]` | Next action for a topic (or globally) with machine-readable `reasons` and a rendered WHY sentence. |
+| `gaps` | Knowledge gaps (missing/thin evidence, prerequisite gaps). |
+| `readiness <topic>` | Structured readiness estimate for a topic. |
+| `profile <topic>` | Adaptation profile: `weak`, `developing`, `strong`, `underconfident`, `overconfident`. |
+| `plan <minutes>|<days>|<objective>` | Build a persistent plan. Re-planning appends a new `plan_version` and retires the previous one. |
+| `today [plan_id]` | Today's actions fitted to the minute budget, plus `did_not_fit`. |
+| `start <topic\|--recommended>` | Start a mission and open the real P7 tutor / P8 assessment. |
+| `engines <mission_id>` | Idempotently re-attach a mission to its engines (for resuming). |
+| `next <mission_id>` / `mission <id>` | Current mission state, steps and harvested engine results. |
+| `complete <mission_id>` | Record one step and advance. |
+| `finish <mission_id>` | Close the mission, marking remaining steps done. |
+| `missions [status]` | List missions, optionally filtered by status. |
+| `history` | Append-only study action history. |
+
+```bash
+medforge study-intel status
+medforge study-intel "recommend"
+medforge study-intel "recommend|Growth Hormone Physiology"
+medforge study-intel "plan|30|1|Close endocrine gaps"
+medforge study-intel "today"
+medforge study-intel "start|--recommended"
+medforge study-intel "complete|mission-1d0601c63139"
+medforge study-intel "finish|mission-1d0601c63139"
+medforge study-intel history
+```
+
+Example recommendation output (abridged):
+
+```json
+{
+  "recommendation": {
+    "topic": "Growth Hormone Physiology", "action": "TUTOR", "priority": 0.077,
+    "mastery_percent": 55.2, "evidence_state": "PARTIAL",
+    "reasons": [
+      {"code": "weakness", "detail": "mastery 55.2%", "weight": 0.067},
+      {"code": "recent_failure", "detail": "recent performance 0.56", "weight": 0.01}
+    ]
+  },
+  "reason": "Growth Hormone Physiology selected for TUTOR because: mastery 55.2%; recent performance 0.56"
+}
+```
+
+---
+
+### `medforge product-intel "<action>|<args...>"` — Product Factory (P9)
+
+One canonical, evidence-cited content model per topic, then deterministic
+rendering of every artifact from that single fact list. See
+`docs/PRODUCT_FACTORY.md`.
+
+```bash
+medforge product-intel "build|Thyroid Hormone Physiology"
+medforge product-intel "build|Thyroid Hormone Physiology|study_guide,flashcards"
+medforge product-intel "status|<content_id>"
+medforge product-intel "inspect|<content_id>"
+medforge product-intel "artifacts"
+medforge product-intel "provenance|<artifact_id>"
+medforge product-intel "consistency|<content_id>"
+medforge product-intel "regenerate|<content_id>"
+```
+
+| Action | What it does |
+| --- | --- |
+| `build <topic>[|types|outdir]` | Generate (or reuse from cache) the canonical item and render artifacts. A topic with no evidence is refused with `{"created": false, "refused": ...}`. |
+| `status <content_id>` | Per-artifact status + overall status (`READY` / `NEEDS_REVIEW` / `BLOCKED`). |
+| `inspect <content_id>` | Canonical content + evidence refs. |
+| `artifacts [content_id]` | Artifact rows (type, version, profile, path, checksum, status). |
+| `provenance <artifact_id>` | artifact → content item → evidence → source, with prompt version and sources digest. |
+| `consistency <content_id>` | Re-verifies every artifact's on-disk checksum (tamper detection). |
+| `regenerate <content_id>[|outdir]` | Renders again from the stored canonical item; a changed source set produces a **new** `content_id`. |
+
+Files land in `PRODUCTS/<topic-slug>/p9/`, one per (artifact type, adaptation
+profile) — `<type>.md` for the default `developing` profile, otherwise
+`<type>.<profile>.md`. Nothing is published; `build` only writes locally.
+
+---
+
 ### `medforge migrate` — Run V3 Migration
 
 Explicitly run the V3 database migration (normally auto-run on first use).
-V4–V9 migrations (curriculum, textbook provenance, evidence graph,
-recency-weighted learner model, interactive tutor, assessment engine) run
-automatically on first use of their feature, or explicitly via their runners:
+V4–V10 migrations (curriculum, textbook provenance, evidence graph,
+recency-weighted learner model, interactive tutor, assessment engine,
+study intelligence / product factory) run automatically on first use of their
+feature, or explicitly via their runners:
 
 ```bash
 medforge migrate
 .venv-v2.1/bin/python -m core.database.migrate_v8 --db database/medforge.sqlite3
 .venv-v2.1/bin/python -m core.database.migrate_v9 --db database/medforge.sqlite3
+.venv-v2.1/bin/python -m core.database.migrate_v10 --db database/medforge.sqlite3
 ```
+
+Every runner verifies `integrity_check` and `foreign_key_check` before
+reporting success, and takes a verified snapshot into `backups/` unless
+`--no-backup` is passed. All are additive and idempotent: re-running is a no-op.
 
 ---
 

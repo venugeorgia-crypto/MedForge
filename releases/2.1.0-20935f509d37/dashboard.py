@@ -63,51 +63,125 @@ with tabs[0]:
                     progress.update(label="Saved at the last completed step",state="error"); show_error(e)
     if st.session_state.get("last_pack"): show_pack(Path(st.session_state["last_pack"]),"last-pack")
 with tabs[1]:
-    topic=st.text_input("Study topic",key="study_topic",max_chars=250)
-    st.caption("A guided 20-minute mission. Log your self-score when you finish to build mastery and weakness tracking.")
-    if st.button("Start study mission") and topic.strip():
-        with st.spinner("Preparing your mission..."):
-            try: st.session_state["mission"]=mf.study(topic.strip())
-            except Exception as e: show_error(e)
-    if st.session_state.get("mission"):
-        st.markdown(st.session_state["mission"])
-        st.subheader("Log your session result")
+    # P9 STUDY HOME: what to study now, why, and one-click missions through the
+    # real P7/P8 engines. The legacy self-log is kept at the bottom for compat.
+    st.subheader("Study home")
+    st.caption("Deterministic recommendations from your learner model, evidence graph, assessments and spaced repetition — every action shows WHY it was selected.")
+    plan=None
+    try: plan=mf.get_today_plan()
+    except Exception as e: show_error(e)
+    if plan:
+        p1,p2,p3=st.columns(3)
+        p1.metric("Today's budget",f"{plan['planned_minutes']}/{plan['budget_minutes']} min")
+        p2.metric("Cards due (SR)",plan["spaced_repetition"].get("due_now",0))
+        p3.metric("Overdue reviews",plan["spaced_repetition"].get("overdue",0))
+        if plan["actions"]:
+            st.markdown("**Today's plan**")
+            for i,a in enumerate(plan["actions"],1):
+                with st.expander(f"{i}. {a.get('topic')} — {a.get('action')} ({a.get('estimated_minutes')} min)"):
+                    st.write(a.get("reason"))
+                    if st.button("Start this mission",key=f"p9_start_{i}"):
+                        with st.spinner("Launching engines (P7 tutor / P8 assessment)..."):
+                            try:
+                                mission=mf.start_study_mission(topic=a.get("topic"))
+                                st.session_state["p9_mission"]=mission["mission_id"]
+                                st.rerun()
+                            except Exception as e: show_error(e)
+            if plan.get("did_not_fit"):
+                with st.expander(f"Did not fit today's budget ({len(plan['did_not_fit'])})"):
+                    st.dataframe(plan["did_not_fit"],hide_index=True)
+        else:
+            st.info("No actionable study targets yet. Import a syllabus (CURRICULUM), link textbooks (TEXTBOOKS), or log study sessions first.")
+    mid=st.session_state.get("p9_mission")
+    if mid:
+        try:
+            mission=mf.get_mission_state(mid)
+            st.divider()
+            st.subheader(f"Active mission — {mission['topic']} ({mission['action_type']})")
+            st.caption(f"Step {min(mission['current_step']+1,len(mission['steps']))} of {len(mission['steps'])} · adaptation profile: {mission['adaptation_profile']} · status: {mission['status']}")
+            engines=mission.get("launch") or {}
+            t,e2=st.columns(2)
+            if engines.get("tutor"):
+                if engines["tutor"].get("tutor_session_id"):
+                    e2.metric("Tutor session",engines["tutor"]["tutor_session_id"],delta="abstained" if engines["tutor"].get("abstained") else "active")
+                elif engines["tutor"].get("error"):
+                    e2.caption(f"Tutor launch error: {engines['tutor']['error']}")
+            if engines.get("assessment"):
+                if engines["assessment"].get("assessment_id"):
+                    t.metric("Assessment",engines["assessment"]["assessment_id"])
+                elif engines["assessment"].get("reason"):
+                    t.caption(f"Assessment not launched: {engines['assessment']['reason']}")
+            if mission.get("next_step"):
+                st.write(f"**Next step:** {mission['next_step'].get('step')} via {mission['next_step'].get('engine')}")
+            b1,b2,b3=st.columns(3)
+            if b1.button("Open tutor session") and mission.get("tutor_session_id"):
+                st.session_state["tutor_resume"]=mission["tutor_session_id"]
+                st.caption(f"Tutor session {mission['tutor_session_id']} — continue it in the TUTOR tab.")
+            if b2.button("Complete current step",type="primary") and mission["status"]=="active":
+                mf.complete_mission_action(mid)
+                st.rerun()
+            if b3.button("Finish mission") and mission["status"]=="active":
+                mf.complete_mission(mid)
+                st.session_state["p9_mission"]=None
+                st.rerun()
+        except Exception as e: show_error(e)
+    st.divider()
+    g1,g2=st.columns(2)
+    with g1:
+        try:
+            gaps=mf.get_knowledge_gaps()
+            st.markdown(f"**Knowledge gaps ({gaps['gap_count']})**")
+            if gaps["gaps"]:
+                st.dataframe(gaps["gaps"],width="stretch",hide_index=True)
+            else:
+                st.caption("No gaps detected.")
+        except Exception as e: show_error(e)
+    with g2:
+        try:
+            status=mf.get_study_status()
+            if status["weak_topics"]:
+                st.markdown("**Weak topics** (P6 learner model)")
+                st.dataframe(status["weak_topics"],width="stretch",hide_index=True)
+            if status["declining"]:
+                st.markdown("**Declining topics**")
+                st.dataframe(status["declining"],width="stretch",hide_index=True)
+            if not status["weak_topics"] and not status["declining"]:
+                st.caption("No weak or declining topics.")
+        except Exception as e: show_error(e)
+    try:
+        rec=mf.recommend_next_action()
+        if rec.get("recommendation"):
+            r=rec["recommendation"]
+            st.markdown(f"**Next up: {r['topic']} → {r['action']}** (priority {r['priority']})")
+            st.caption(rec["reason"])
+            if st.button("Start recommended mission"):
+                with st.spinner("Launching engines..."):
+                    try:
+                        mission=mf.start_study_mission(topic=r["topic"])
+                        st.session_state["p9_mission"]=mission["mission_id"]
+                        st.rerun()
+                    except Exception as e: show_error(e)
+    except Exception as e: show_error(e)
+    rtopic=st.text_input("Readiness check for topic",key="p9_readiness_topic",placeholder="e.g. Thyroid physiology")
+    if st.button("Check readiness") and rtopic.strip():
+        try: st.json(mf.get_readiness(rtopic.strip()))
+        except Exception as e: show_error(e)
+    st.divider()
+    with st.expander("Log a self-study session (outside MedForge missions)"):
+        topic=st.text_input("Study topic",key="study_topic",max_chars=250)
         sc1,sc2=st.columns(2)
-        score=sc1.slider("Self-score (rubric out of 10)",0,10,5,key="study_score",help="Matches the rubric at the end of your mission.")
+        score=sc1.slider("Self-score (rubric out of 10)",0,10,5,key="study_score")
         minutes=sc2.number_input("Minutes spent",0,240,20,key="study_minutes")
         wconcept=st.text_input("Concept you missed (optional)",key="study_weak_concept",placeholder="e.g. isovolumetric contraction")
         wmiscon=st.text_input("What was the misconception?",key="study_weak_misconception")
         wsev=st.selectbox("Weakness severity",list(mf.WEAKNESS_SEVERITY),1,key="study_weak_severity")
-        if st.button("Log session result",type="primary"):
+        if st.button("Log session result",type="primary") and topic.strip():
             weak=[{"concept":wconcept,"misconception":wmiscon,"severity":wsev}] if wconcept.strip() else []
             try:
-                res=mf.log_study_result((st.session_state.get("study_topic") or topic).strip(),score,duration_seconds=int(minutes)*60,notes="Logged from dashboard",weaknesses=weak)
+                res=mf.log_study_result(topic.strip(),score,duration_seconds=int(minutes)*60,notes="Logged from dashboard",weaknesses=weak)
                 m=res["mastery"]
                 st.success(f"Logged {res['score']:.0f}/100 for '{res['topic_id']}'. Mastery {m['mastery_score']}/100 across {m['total_attempts']} attempts.")
             except Exception as e: show_error(e)
-    st.subheader("Mastery & weaknesses")
-    snap=None
-    try: snap=mf.learner_snapshot()
-    except Exception as e: show_error(e)
-    if snap:
-        s=snap["summary"]
-        m1,m2,m3,m4,m5=st.columns(5)
-        m1.metric("Topics studied",s["topics_studied"])
-        m2.metric("Average mastery",f"{s['avg_mastery']:.0f}/100")
-        m3.metric("Open weaknesses",s["open_weaknesses"])
-        m4.metric("Sessions logged",s["sessions_total"])
-        m5.metric("Cards due",s.get("cards_due",0))
-        if snap["mastery"]:
-            st.markdown("**Topic mastery** (weakest first)")
-            st.dataframe(snap["mastery"],width="stretch",hide_index=True)
-        else:
-            st.info("Log a study session to start tracking mastery.")
-        if snap["weaknesses"]:
-            with st.expander(f"Unresolved weaknesses ({s['open_weaknesses']})"):
-                st.dataframe(snap["weaknesses"],width="stretch",hide_index=True)
-        if snap["recent_sessions"]:
-            with st.expander("Recent sessions"):
-                st.dataframe(snap["recent_sessions"],width="stretch",hide_index=True)
 with tabs[2]:
     st.caption("Spaced repetition (SM-2 or FSRS). Your packs schedule their cards here; grade 0-5 to reschedule.")
     if st.session_state.get("review_flash"): st.success(st.session_state.pop("review_flash"))

@@ -559,6 +559,24 @@ ASSESSMENT_SCOPE_TYPES = ("topic", "seminar", "week", "subject", "custom")
 ASSESSMENT_ITEM_CORRECTNESS = ("correct", "partial", "incorrect", "ungraded")
 ASSESSMENT_BLUEPRINT_STATUSES = ("DRAFT", "ACTIVE", "RETIRED")
 
+# ─── V10 study-intelligence enums ───
+STUDY_PLAN_STATUSES = ("ACTIVE", "COMPLETED", "RETIRED")
+STUDY_MISSION_STATUSES = ("created", "active", "completed", "abandoned")
+STUDY_ACTION_TYPES = (
+    "NEW_TEACHING", "REVIEW", "DRILL", "PREREQUISITE_REPAIR", "TUTOR",
+    "ASSESS", "REMEDIATION", "RECALL", "SPACED_REVIEW",
+)
+STUDY_ACTION_STATUSES = ("pending", "in_progress", "done", "skipped", "failed")
+STUDY_TOPIC_STATES = (
+    "NOT_STARTED", "IN_PROGRESS", "STUDIED", "ASSESSING",
+    "MASTERED_ESTIMATE", "REVIEW_DUE",
+)
+CONTENT_ARTIFACT_TYPES = (
+    "study_guide", "cheat_sheet", "flashcards", "quiz", "mind_map", "script",
+)
+CONTENT_ARTIFACT_STATUSES = ("DRAFT", "VALIDATING", "READY", "NEEDS_REVIEW", "BLOCKED")
+ADAPTATION_PROFILES = ("weak", "developing", "strong", "underconfident", "overconfident")
+
 _AITYPE_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_ITEM_TYPES)
 _AISTATUS_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_ITEM_STATUSES)
 _AMODE_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_MODES)
@@ -747,6 +765,125 @@ CREATE TABLE IF NOT EXISTS assessment_item_quality (
 );
 
 CREATE INDEX IF NOT EXISTS idx_assess_quality_item ON assessment_item_quality(item_id, item_version);
+"""
+
+_SPLANS_SQL = ", ".join(f"'{v}'" for v in STUDY_PLAN_STATUSES)
+_SMISS_SQL = ", ".join(f"'{v}'" for v in STUDY_MISSION_STATUSES)
+_SATYPE_SQL = ", ".join(f"'{v}'" for v in STUDY_ACTION_TYPES)
+_SASTATUS_SQL = ", ".join(f"'{v}'" for v in STUDY_ACTION_STATUSES)
+_SCART_SQL = ", ".join(f"'{v}'" for v in CONTENT_ARTIFACT_TYPES)
+_SCAS_SQL = ", ".join(f"'{v}'" for v in CONTENT_ARTIFACT_STATUSES)
+_SPROF_SQL = ", ".join(f"'{v}'" for v in ADAPTATION_PROFILES)
+
+V10_SCHEMA_DDL = f"""
+-- 1. Persistent, reproducible study plans (never rewritten; new versions append)
+CREATE TABLE IF NOT EXISTS study_plans (
+    plan_id TEXT PRIMARY KEY,
+    learner_key TEXT NOT NULL DEFAULT 'local',
+    title TEXT NOT NULL DEFAULT '',
+    scope_type TEXT NOT NULL DEFAULT 'subject',
+    scope_node_id TEXT NULL,
+    scope_titles TEXT NOT NULL DEFAULT '[]',
+    objective TEXT NOT NULL DEFAULT '',
+    target_date TEXT NULL,
+    daily_minutes INTEGER NOT NULL DEFAULT 30 CHECK(daily_minutes >= 5 AND daily_minutes <= 480),
+    priorities TEXT NOT NULL DEFAULT '[]',
+    actions TEXT NOT NULL DEFAULT '[]',
+    gaps TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ({_SPLANS_SQL})),
+    planner_version TEXT NOT NULL DEFAULT '',
+    config TEXT NOT NULL DEFAULT '{{}}',
+    seed TEXT NOT NULL DEFAULT '',
+    plan_version INTEGER NOT NULL DEFAULT 1 CHECK(plan_version >= 1),
+    supersedes_plan_id TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_study_plans_status ON study_plans(status, updated_at);
+
+-- 2. Study missions: orchestrated sequences over P7/P8/SR with explicit completion
+CREATE TABLE IF NOT EXISTS study_missions (
+    mission_id TEXT PRIMARY KEY,
+    plan_id TEXT NULL REFERENCES study_plans(plan_id) ON DELETE SET NULL,
+    learner_key TEXT NOT NULL DEFAULT 'local',
+    topic TEXT NOT NULL,
+    mastery_key TEXT NOT NULL DEFAULT '',
+    curriculum_node_id TEXT NULL REFERENCES curriculum_nodes(id) ON DELETE SET NULL,
+    objective TEXT NOT NULL DEFAULT '',
+    action_type TEXT NOT NULL CHECK(action_type IN ({_SATYPE_SQL})),
+    adaptation_profile TEXT NOT NULL DEFAULT 'developing' CHECK(adaptation_profile IN ({_SPROF_SQL})),
+    steps TEXT NOT NULL DEFAULT '[]',
+    estimated_minutes INTEGER NOT NULL DEFAULT 20 CHECK(estimated_minutes >= 1),
+    evidence_refs TEXT NOT NULL DEFAULT '[]',
+    expected_outcome TEXT NOT NULL DEFAULT '',
+    completion_criteria TEXT NOT NULL DEFAULT '{{}}',
+    status TEXT NOT NULL DEFAULT 'created' CHECK(status IN ({_SMISS_SQL})),
+    tutor_session_id TEXT NULL,
+    assessment_id TEXT NULL,
+    current_step INTEGER NOT NULL DEFAULT 0 CHECK(current_step >= 0),
+    results TEXT NOT NULL DEFAULT '{{}}',
+    started_at TEXT NULL,
+    completed_at TEXT NULL,
+    study_version TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_study_missions_status ON study_missions(status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_study_missions_topic ON study_missions(topic);
+
+-- 3. Append-only action history (auditable; one row per completed/attempted action)
+CREATE TABLE IF NOT EXISTS study_actions (
+    action_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mission_id TEXT NULL REFERENCES study_missions(mission_id) ON DELETE SET NULL,
+    plan_id TEXT NULL,
+    topic TEXT NOT NULL DEFAULT '',
+    mastery_key TEXT NOT NULL DEFAULT '',
+    action_type TEXT NOT NULL CHECK(action_type IN ({_SATYPE_SQL})),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ({_SASTATUS_SQL})),
+    reason TEXT NOT NULL DEFAULT '',
+    engine_ref TEXT NOT NULL DEFAULT '',
+    outcome TEXT NOT NULL DEFAULT '{{}}',
+    occurred_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_study_actions_topic ON study_actions(topic, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_study_actions_mission ON study_actions(mission_id);
+
+-- 4. Canonical evidence-grounded content (one per topic+sources+config)
+CREATE TABLE IF NOT EXISTS content_items (
+    content_id TEXT PRIMARY KEY,
+    topic TEXT NOT NULL,
+    mastery_key TEXT NOT NULL DEFAULT '',
+    curriculum_node_id TEXT NULL REFERENCES curriculum_nodes(id) ON DELETE SET NULL,
+    sources_digest TEXT NOT NULL DEFAULT '',
+    config_digest TEXT NOT NULL DEFAULT '',
+    prompt_version TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '{{}}',
+    evidence_refs TEXT NOT NULL DEFAULT '[]',
+    generation_mode TEXT NOT NULL DEFAULT 'model',
+    content_version TEXT NOT NULL DEFAULT '',
+    study_version TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_content_items_topic ON content_items(topic, created_at);
+
+-- 5. Rendered artifacts with provenance + quality-gate status
+CREATE TABLE IF NOT EXISTS content_artifacts (
+    artifact_id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL REFERENCES content_items(content_id) ON DELETE CASCADE,
+    artifact_type TEXT NOT NULL CHECK(artifact_type IN ({_SCART_SQL})),
+    artifact_version INTEGER NOT NULL DEFAULT 1 CHECK(artifact_version >= 1),
+    adaptation_profile TEXT NOT NULL DEFAULT 'developing' CHECK(adaptation_profile IN ({_SPROF_SQL})),
+    path TEXT NOT NULL DEFAULT '',
+    checksum TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ({_SCAS_SQL})),
+    validation TEXT NOT NULL DEFAULT '{{}}',
+    render_mode TEXT NOT NULL DEFAULT 'deterministic',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_content_artifacts_content ON content_artifacts(content_id);
+CREATE INDEX IF NOT EXISTS idx_content_artifacts_topic_type ON content_artifacts(artifact_type);
 """
 
 # V3 Schema DDL statements

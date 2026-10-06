@@ -155,6 +155,23 @@ from medforge.evidence import (
     evidence_snapshot, aggregate_verdicts, parse_verifier_response,
     curriculum_node_id_for_topic, VERIFIER_SYSTEM, FACTUAL_CLAIM_TYPES,
 )
+from medforge.study import (
+    STUDY_VERSION, PLANNER_VERSION, REASON_WEIGHTS, MASTERED_PCT, STUDIED_PCT,
+    ACTION_MINUTES, SHORTENED_MIN_MINUTES,
+    ensure_study_tables, gather_learner_context, get_study_status,
+    recommend_next_action, get_knowledge_gaps, get_readiness,
+    build_study_plan, get_plan, list_plans, get_today_plan,
+    start_study_mission, get_mission_state, list_missions,
+    complete_mission_action, complete_mission, harvest_mission_results,
+    launch_mission_engines, get_study_history, adaptation_profile,
+)
+from medforge.content import (
+    CONTENT_VERSION, PROMPT_VERSION,
+    generate_canonical_content, get_content, list_content,
+    render_study_products, get_product_status, list_artifacts,
+    artifact_provenance, content_consistency_report,
+    canonical_fallback_from_evidence,
+)
 
 __version__ = VERSION
 
@@ -254,4 +271,19 @@ __all__ = [
     "curriculum_node_id_for_topic", "VERIFIER_SYSTEM", "FACTUAL_CLAIM_TYPES",
     "CLAIM_TYPES", "CLAIM_VERIFICATION_STATUS", "CLAIM_REVIEW_STATUS",
     "EVIDENCE_TYPES", "CLAIM_EVIDENCE_RELATIONSHIPS", "VERIFICATION_RESULTS",
+    # study intelligence orchestrator (V10/P9)
+    "STUDY_VERSION", "PLANNER_VERSION", "CONTENT_VERSION", "PROMPT_VERSION",
+    "REASON_WEIGHTS", "MASTERED_PCT", "STUDIED_PCT",
+    "ACTION_MINUTES", "SHORTENED_MIN_MINUTES",
+    "ensure_study_tables", "gather_learner_context", "get_study_status",
+    "recommend_next_action", "get_knowledge_gaps", "get_readiness",
+    "build_study_plan", "get_plan", "list_plans", "get_today_plan",
+    "start_study_mission", "get_mission_state", "list_missions",
+    "complete_mission_action", "complete_mission", "harvest_mission_results",
+    "launch_mission_engines", "get_study_history", "adaptation_profile",
+    # canonical content + product rendering (V10/P9)
+    "generate_canonical_content", "get_content", "list_content",
+    "render_study_products", "get_product_status", "list_artifacts",
+    "artifact_provenance", "content_consistency_report",
+    "canonical_fallback_from_evidence",
 ]

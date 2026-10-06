@@ -440,6 +440,46 @@ runs V8 → V7 → V6 → V5 → V4 first so the curriculum foreign keys resolve
 optional verified backup at `backups/medforge_pre_v9_backup.db`). Rollback:
 drop the six new tables (no existing data is touched).
 
+### V10 study-intelligence enums
+`STUDY_PLAN_STATUSES` = `('ACTIVE', 'COMPLETED', 'RETIRED')` ·
+`STUDY_MISSION_STATUSES` = `('created', 'active', 'completed', 'abandoned')` ·
+`STUDY_ACTION_TYPES` = `('NEW_TEACHING', 'REVIEW', 'DRILL', 'PREREQUISITE_REPAIR',
+'TUTOR', 'ASSESS', 'REMEDIATION', 'RECALL', 'SPACED_REVIEW')` ·
+`STUDY_ACTION_STATUSES` = `('pending', 'in_progress', 'done', 'skipped',
+'failed')` · `STUDY_TOPIC_STATES` = `('NOT_STARTED', 'IN_PROGRESS', 'STUDIED',
+'ASSESSING', 'MASTERED_ESTIMATE', 'REVIEW_DUE')` · `CONTENT_ARTIFACT_TYPES` =
+`('study_guide', 'cheat_sheet', 'flashcards', 'quiz', 'mind_map', 'script')` ·
+`CONTENT_ARTIFACT_STATUSES` = `('DRAFT', 'VALIDATING', 'READY',
+'NEEDS_REVIEW', 'BLOCKED')` · `ADAPTATION_PROFILES` = `('weak', 'developing',
+'strong', 'underconfident', 'overconfident')`.
+
+## V10 Study Intelligence Tables (migration `10.0.0`)
+
+Purely additive: five new tables plus indexes (no rebuild, no row rewrite, no
+altered column). Orchestration design: `docs/STUDY_INTELLIGENCE.md`; canonical
+content + rendering: `docs/PRODUCT_FACTORY.md`. Audit + execution record:
+`docs/P9_MATRIX.md`.
+
+| Table | Purpose | Key columns |
+| --- | --- | --- |
+| `study_plans` | Persistent, reproducible plans; re-planning appends a new version | plan_id (PK), learner_key, title, scope_type, scope_node_id, scope_titles, objective, target_date, daily_minutes CHECK 5–480, priorities, actions, gaps, status CHECK, planner_version, config, seed, plan_version CHECK ≥ 1, supersedes_plan_id, created_at, updated_at |
+| `study_missions` | One mission per attempt, bound to real P7/P8 sessions, with explicit completion | mission_id (PK), plan_id FK→study_plans SET NULL, learner_key, topic, mastery_key, curriculum_node_id FK→curriculum_nodes SET NULL, objective, action_type CHECK, adaptation_profile CHECK, steps, estimated_minutes CHECK ≥ 1, evidence_refs, expected_outcome, completion_criteria, status CHECK, tutor_session_id, assessment_id, current_step CHECK ≥ 0, results, started_at, completed_at, study_version, created_at, updated_at |
+| `study_actions` | Append-only auditable action log (the study record) | action_id (PK AUTOINCREMENT), mission_id FK→study_missions SET NULL, plan_id, topic, mastery_key, action_type CHECK, status CHECK, reason, engine_ref, outcome, occurred_at, created_at |
+| `content_items` | Canonical evidence-grounded content, one row per (topic, sources, config, prompt, model) | content_id (PK), topic, mastery_key, curriculum_node_id FK SET NULL, sources_digest, config_digest, prompt_version, model, content, evidence_refs, generation_mode (`model` \| `deterministic_fallback`), content_version, study_version, created_at |
+| `content_artifacts` | Rendered artifacts with version, checksum, status and validation | artifact_id (PK), content_id FK→content_items CASCADE, artifact_type CHECK, artifact_version CHECK ≥ 1, adaptation_profile CHECK, path, checksum, status CHECK, validation, render_mode, created_at |
+
+Indexes: `idx_study_plans_status`, `idx_study_missions_status`,
+`idx_study_missions_topic`, `idx_study_actions_topic`, `idx_study_actions_mission`,
+`idx_content_items_topic`, `idx_content_artifacts_content`,
+`idx_content_artifacts_topic_type`.
+
+Defined in `core/database/schema.py` (`V10_SCHEMA_DDL`); applied by
+`core/database/migrate_v10.py::ensure_study_v10()` (idempotent, self-healing,
+runs `ensure_assessment_v9` first so the curriculum foreign keys resolve,
+verifies `integrity_check` + `foreign_key_check`, optional verified backup at
+`backups/medforge_pre_v10_backup.db`). Rollback: drop the five new tables (no
+existing data is touched).
+
 ### `PREREQUISITE_TYPES`
 `('strict', 'recommended', 'co-requisite')`
 
