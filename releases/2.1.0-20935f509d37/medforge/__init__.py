@@ -166,9 +166,9 @@ from medforge.study import (
     launch_mission_engines, get_study_history, adaptation_profile,
 )
 from medforge.content import (
-    CONTENT_VERSION, PROMPT_VERSION,
+    CONTENT_VERSION, PROMPT_VERSION, SUMMARY_ARTIFACT_TYPES,
     generate_canonical_content, get_content, list_content,
-    render_study_products, get_product_status, list_artifacts,
+    render_study_products, regenerate_product, get_product_status, list_artifacts,
     artifact_provenance, content_consistency_report,
     canonical_fallback_from_evidence,
 )
@@ -283,7 +283,7 @@ __all__ = [
     "launch_mission_engines", "get_study_history", "adaptation_profile",
     # canonical content + product rendering (V10/P9)
     "generate_canonical_content", "get_content", "list_content",
-    "render_study_products", "get_product_status", "list_artifacts",
-    "artifact_provenance", "content_consistency_report",
-    "canonical_fallback_from_evidence",
+    "render_study_products", "regenerate_product", "get_product_status",
+    "list_artifacts", "artifact_provenance", "content_consistency_report",
+    "canonical_fallback_from_evidence", "SUMMARY_ARTIFACT_TYPES",
 ]

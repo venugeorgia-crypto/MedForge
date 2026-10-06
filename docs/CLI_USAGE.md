@@ -634,7 +634,7 @@ medforge product-intel "regenerate|<content_id>"
 | `artifacts [content_id]` | Artifact rows (type, version, profile, path, checksum, status). |
 | `provenance <artifact_id>` | artifact → content item → evidence → source, with prompt version and sources digest. |
 | `consistency <content_id>` | Re-verifies every artifact's on-disk checksum (tamper detection). |
-| `regenerate <content_id>[|outdir]` | Renders again from the stored canonical item; a changed source set produces a **new** `content_id`. |
+| `regenerate <content_id>[|outdir]` | `regenerate_product()` — renders again from the **stored** canonical item and reports `regenerated` + version provenance; a changed source set produces a **new** `content_id`. |
 
 Files land in `PRODUCTS/<topic-slug>/p9/`, one per (artifact type, adaptation
 profile) — `<type>.md` for the default `developing` profile, otherwise

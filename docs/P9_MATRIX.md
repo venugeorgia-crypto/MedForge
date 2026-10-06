@@ -265,8 +265,8 @@ items, a completed 20-question assessment).
 | Metric | Value |
 | --- | --- |
 | Baseline (P8) | 210 passing |
-| New P9 tests | 51 (`test_study_intelligence.py` 28, `test_product_integration.py` 23) |
-| Final total | **261 passing in ~35s** |
+| New P9 tests | 56 (`test_study_intelligence.py` 28, `test_product_integration.py` 28) |
+| Final total | **266 passing in ~36s** |
 | Regressions | 0 |
 
 ### 4.2 Migration (live database)
@@ -333,10 +333,12 @@ the learner changed: `study_guide.md` (developing, no scaffold) vs
 
 Verified on the populated demo home: `study-intel status|recommend|gaps|readiness|`
 `profile|plan|today|missions|history` and `product-intel artifacts|status|`
-`consistency|provenance|build`. `study-intel plan "20|1|…"` created plan
-version 3; `today` fit 15 of 20 minutes and listed the three actions that did
-not fit; `product-intel consistency` returned `consistent: True` across the
-fresh artifact set. Legacy commands were re-checked after the rename:
+`consistency|provenance|build|regenerate`. `study-intel plan "20|1|…"` created
+plan version 3; `today` fit 15 of 20 minutes and listed the three actions that
+did not fit; `product-intel consistency` returned `consistent: True` across the
+fresh artifact set; `product-intel regenerate` accumulated artifact version 5
+and reported `regenerated: True` with `generation_mode: model`,
+`prompt_version: canonical-v1`, `content_version: p9-content-v1`. Legacy commands were re-checked after the rename:
 `mastery`, `due`, `claims`, `assessment items` and `status` all work (the last
 was broken before this phase).
 

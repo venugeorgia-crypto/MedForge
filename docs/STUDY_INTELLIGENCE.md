@@ -59,10 +59,13 @@ Versions: `STUDY_VERSION = "p9-study-v1"`, `PLANNER_VERSION = "p9-planner-v1"`.
 | `harvest_mission_results` | Bounded engine aggregates (tutor scores, assessment percentage). |
 | `launch_mission_engines` | Idempotent re-attach to P7/P8 after a restart. |
 
-`get_study_status()`, `recommend_next_action()`, `build_study_plan()`,
-`get_today_plan()`, `start_study_mission()`, `get_mission_state()`,
-`complete_mission_action()`, `get_knowledge_gaps()`, `get_readiness()` and
-`get_study_history()` are the stable P9 contract for later phases.
+The full P9 contract exposed for later phases is: `get_study_status()`,
+`recommend_next_action()`, `build_study_plan()`, `get_today_plan()`,
+`start_study_mission()`, `get_mission_state()`, `complete_mission_action()`,
+`generate_canonical_content()`, `render_study_products()`,
+`regenerate_product()`, `get_knowledge_gaps()`, `get_readiness()`,
+`get_product_status()` and `get_study_history()`. Each is a thin orchestrator
+over the owning engine, and a contract test asserts they all stay exported.
 
 ## 2. Topic state classification
 

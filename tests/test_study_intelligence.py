@@ -551,7 +551,7 @@ class TestPublicSurface:
             "get_today_plan", "start_study_mission", "get_mission_state",
             "complete_mission_action", "generate_canonical_content",
             "render_study_products", "get_knowledge_gaps", "get_readiness",
-            "get_product_status", "get_study_history",
+            "get_product_status", "regenerate_product", "get_study_history",
         ]
         missing = [n for n in contract if not hasattr(mf, n)]
         assert not missing, f"P9 orchestration contract broken: {missing}"

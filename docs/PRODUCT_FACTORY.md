@@ -31,6 +31,7 @@ EVIDENCE (P3 chunks / P4 graph)
 | `generate_canonical_content(topic, sources=None, source_text=None, config=None, model=None, allow_model=True, now=None)` | Produce (or fetch from cache) the canonical content for one topic. |
 | `get_content(content_id)` / `list_content(topic=None, limit=20)` | Read canonical items. |
 | `render_study_products(content_id, artifact_types=None, adaptation=None, outdir=None, now=None)` | Render artifacts to disk + DB. |
+| `regenerate_product(content_id, artifact_types=None, adaptation=None, outdir=None, now=None)` | The contract interface for "render again": re-renders from the **stored** canonical item (never re-generates facts) and reports `regenerated`, `generation_mode`, `prompt_version`, `content_version`. |
 | `get_product_status(content_id)` | Per-artifact status + overall status. |
 | `list_artifacts(content_id=None, limit=50)` | Artifact rows. |
 | `artifact_provenance(artifact_id)` | artifact → content item → evidence → source. |
@@ -204,7 +205,9 @@ product-intel regenerate <content_id>[|outdir]
 ```
 
 `build` refuses topics with no evidence with an honest object
-(`{"created": false, "refused": ...}`) instead of crashing. The legacy
+(`{"created": false, "refused": ...}`) instead of crashing; `regenerate`
+delegates to `regenerate_product()`, so regeneration consumes the stored
+canonical item and cannot silently change an artifact's facts. The legacy
 `product <topic>` command is untouched.
 
 Products are not written to any remote location and are not published;

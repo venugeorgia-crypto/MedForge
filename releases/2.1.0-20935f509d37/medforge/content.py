@@ -49,8 +49,8 @@ SUMMARY_ARTIFACT_TYPES = ("cheat_sheet", "mind_map", "script")
 __all__ = [
     "CONTENT_VERSION", "PROMPT_VERSION", "SUMMARY_ARTIFACT_TYPES",
     "generate_canonical_content", "get_content", "list_content",
-    "render_study_products", "get_product_status", "list_artifacts",
-    "artifact_provenance", "content_consistency_report",
+    "render_study_products", "regenerate_product", "get_product_status",
+    "list_artifacts", "artifact_provenance", "content_consistency_report",
     "canonical_fallback_from_evidence",
 ]
 
@@ -561,6 +561,31 @@ def render_study_products(content_id: str, artifact_types: Optional[List[str]] =
                               "status": "READY" if not missing else "NEEDS_REVIEW"})
     return {"content_id": content_id, "topic": topic, "adaptation_profile": profile,
             "artifacts": artifact_rows, "consistency": consistency, "generated_at": now}
+
+
+def regenerate_product(content_id: str, artifact_types: Optional[List[str]] = None,
+                       adaptation: Optional[Dict[str, Any]] = None,
+                       outdir: Optional[Path] = None,
+                       now: Optional[str] = None) -> Dict[str, Any]:
+    """Re-render artifacts from the STORED canonical content.
+
+    Regeneration deliberately never re-generates the canonical item: it renders
+    again from what is already stored and cited, so a re-render cannot silently
+    change the facts behind an artifact. A changed source set is a different
+    ``content_id`` by construction, which is what keeps history append-only.
+    Version numbers accumulate, so the previous render stays auditable.
+    """
+    _ensure_tables()
+    item = get_content(content_id)
+    if not item:
+        raise ValueError(f"Unknown content_id {content_id!r}")
+    out = render_study_products(content_id, artifact_types=artifact_types,
+                               adaptation=adaptation, outdir=outdir, now=now)
+    out["regenerated"] = True
+    out["generation_mode"] = item.get("generation_mode")
+    out["prompt_version"] = item.get("prompt_version")
+    out["content_version"] = item.get("content_version")
+    return out
 
 
 def get_product_status(content_id: str) -> Dict[str, Any]:

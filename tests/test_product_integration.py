@@ -326,6 +326,23 @@ class TestProvenance:
                                                     "flashcards", "quiz"}
         assert status["content_version"] == CT.CONTENT_VERSION
 
+    def test_regenerate_rerenders_from_stored_canonical(self, env, tmp_path):
+        # The contract interface for "render again": it must consume the STORED
+        # canonical item (never re-generate facts), and version what it writes.
+        item = _gen()
+        first = CT.regenerate_product(item["content_id"], outdir=tmp_path)
+        assert first["regenerated"] is True
+        assert first["generation_mode"] == item["generation_mode"]
+        assert first["artifacts"][0]["version"] == 1
+        second = CT.regenerate_product(item["content_id"], outdir=tmp_path)
+        assert second["artifacts"][0]["version"] == 2
+        assert CT.get_content(item["content_id"])["content"] == item["content"]
+        assert CT.content_consistency_report(item["content_id"])["consistent"] is True
+
+    def test_regenerate_unknown_id_raises(self, env):
+        with pytest.raises(ValueError):
+            CT.regenerate_product("content-does-not-exist")
+
     def test_product_status_unknown_id_raises(self, env):
         with pytest.raises(ValueError):
             CT.get_product_status("does-not-exist")

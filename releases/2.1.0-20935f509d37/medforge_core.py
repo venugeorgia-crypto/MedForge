@@ -73,7 +73,7 @@ from medforge import (  # noqa: E402
     launch_mission_engines, get_study_history, adaptation_profile,
     STUDY_VERSION, PLANNER_VERSION,
     generate_canonical_content, get_content, list_content,
-    render_study_products, get_product_status, list_artifacts,
+    render_study_products, regenerate_product, get_product_status, list_artifacts,
     artifact_provenance, content_consistency_report,
     CONTENT_VERSION, PROMPT_VERSION,
     mkdirs, sh, slugify, utcnow, atomic_text, job_lock, serialized, chunks, batch,
@@ -721,8 +721,7 @@ def main() -> None:
             if len(parts) < 2:
                 raise SystemExit("Usage: medforge_core product-intel regenerate <content_id>")
             outdir = Path(parts[2]) if len(parts) > 2 and parts[2] else None
-            print(json.dumps(render_study_products(
-                parts[1], outdir=outdir), indent=2))
+            print(json.dumps(regenerate_product(parts[1], outdir=outdir), indent=2))
         else:
             raise SystemExit(
                 "Usage: medforge_core product-intel build|status|inspect|artifacts|"
