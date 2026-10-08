@@ -712,6 +712,40 @@ textbooks. See `docs/KNOWLEDGE_REFRESH.md`.
 
 ---
 
+### `medforge nightly` — Nightly Workflow (P14)
+
+```bash
+medforge nightly                 # run: maintenance → refresh → backup → study prep
+medforge nightly dry-run         # show the planned steps, write nothing
+medforge nightly "only|maintenance,backup"
+medforge nightly runs            # recorded runs (newest first)
+medforge nightly status          # job, last run, schedule state
+```
+
+Each step is recorded in `automation_runs`; a failing step marks the run
+`failed` with its error. Backups are verified snapshots in `<home>/backups/`
+(newest 7 nightly snapshots are kept; other backups are never pruned).
+See `docs/AUTOMATION.md`.
+
+---
+
+### `medforge schedule` — Nightly Scheduling (P14)
+
+```bash
+medforge schedule install                    # daily 03:00 launchd agent (macOS)
+medforge schedule "install|4|30"             # custom hour/minute
+medforge schedule "install|3|0|write-only"   # write the plist, do not load it
+medforge schedule status
+medforge schedule uninstall
+```
+
+macOS only: writes `~/Library/LaunchAgents/org.medforge.nightly.plist`
+(override the directory with `MEDFORGE_LAUNCH_AGENTS`) and loads it with
+`launchctl` unless `write-only`. Other platforms return the exact cron line to
+add. See `docs/AUTOMATION.md`.
+
+---
+
 ### `medforge migrate` — Run V3 Migration
 
 Explicitly run the V3 database migration (normally auto-run on first use).
@@ -730,6 +764,7 @@ medforge migrate
 .venv-v2.1/bin/python -m core.database.migrate_v12 --db database/medforge.sqlite3
 .venv-v2.1/bin/python -m core.database.migrate_v13 --db database/medforge.sqlite3
 .venv-v2.1/bin/python -m core.database.migrate_v14 --db database/medforge.sqlite3
+.venv-v2.1/bin/python -m core.database.migrate_v15 --db database/medforge.sqlite3
 ```
 
 Every runner verifies `integrity_check` and `foreign_key_check` before

@@ -152,6 +152,7 @@ def main() -> None:
               "publication run-gates|approve|publish|retire|state|queue|reviews|resolve|export | "
               "video render|state|probe | "
               "refresh check|status|notifications|ack|reverify | "
+              "nightly [run|dry-run|only|runs|status] | schedule install|status|uninstall | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -865,6 +866,60 @@ def main() -> None:
             raise SystemExit(
                 "Usage: medforge_core refresh check|status|notifications|ack|reverify"
             )
+    elif cmd == "nightly":
+        # P14 automation: one nightly job (maintenance → refresh → verified
+        # backup → study prep) with a recorded audit trail.
+        # nightly [dry-run] | nightly only <steps> | nightly runs | nightly status
+        from medforge import automation as AUTO
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else ""
+        if action in ("", "run"):
+            print(json.dumps(AUTO.run_nightly(triggered_by="manual"),
+                             indent=2, default=str))
+        elif action == "dry-run":
+            print(json.dumps(AUTO.run_nightly(triggered_by="manual", dry_run=True),
+                             indent=2, default=str))
+        elif action == "only":
+            if len(parts) < 2 or not parts[1]:
+                raise SystemExit("Usage: medforge_core nightly only maintenance,backup")
+            steps = [s.strip() for s in parts[1].split(",") if s.strip()]
+            print(json.dumps(AUTO.run_nightly(triggered_by="manual", steps=steps),
+                             indent=2, default=str))
+        elif action == "runs":
+            print(json.dumps(AUTO.list_runs(), indent=2, default=str))
+        elif action == "status":
+            print(json.dumps(AUTO.get_automation_status(), indent=2, default=str))
+        else:
+            raise SystemExit("Usage: medforge_core nightly [run|dry-run|only|runs|status]")
+    elif cmd == "schedule":
+        # P14 scheduling: launchd user agent on macOS (cron guidance elsewhere).
+        # schedule install [hour|minute] | schedule status | schedule uninstall
+        from medforge import automation as AUTO
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else "status"
+        if action == "install":
+            hour = int(parts[1]) if len(parts) > 1 and parts[1] else 3
+            minute = int(parts[2]) if len(parts) > 2 and parts[2] else 0
+            write_only = len(parts) > 3 and parts[3].lower() in ("write-only", "write_only")
+            print(json.dumps(AUTO.install_schedule(hour=hour, minute=minute,
+                                                  write_only=write_only),
+                             indent=2, default=str))
+        elif action == "uninstall":
+            print(json.dumps(AUTO.uninstall_schedule(), indent=2, default=str))
+        elif action == "status":
+            print(json.dumps(AUTO.schedule_status(), indent=2, default=str))
+        else:
+            raise SystemExit("Usage: medforge_core schedule install|status|uninstall")
     elif cmd == "migrate":
         with job_lock():
             print(json.dumps(migrate_database(), indent=2))

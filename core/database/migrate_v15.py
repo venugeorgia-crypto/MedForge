@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Migration 14.0.0 — P13 knowledge refresh: source_refresh_log,
-knowledge_refresh_runs, knowledge_notifications.
+"""Migration 15.0.0 — P14 automation: automation_jobs + automation_runs.
 
 Additive and idempotent. Chains the full migration path
-(v9 → v10 → v11 → v12 → v13 → v14), takes a verified snapshot backup by
-default, records the schema_migrations row, and verifies integrity +
-foreign keys.
+(v9 → v10 → v11 → v12 → v13 → v14 → v15), takes a verified snapshot backup by
+default, records the schema_migrations row, and verifies integrity + foreign
+keys.
 
-Run directly:  .venv-v2.1/bin/python core/database/migrate_v14.py [--db PATH] [--no-backup]
+Run directly:  .venv-v2.1/bin/python core/database/migrate_v15.py [--db PATH] [--no-backup]
 """
 
 from __future__ import annotations
@@ -18,20 +17,18 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Ensure we can import schema from the core package
 _CORE_DIR = Path(__file__).resolve().parent
 if str(_CORE_DIR) not in sys.path:
     sys.path.insert(0, str(_CORE_DIR))
 
-from schema import V14_SCHEMA_DDL, V14_TABLES  # noqa: E402
+from schema import V15_SCHEMA_DDL, V15_TABLES  # noqa: E402
 
 
-V14_VERSION = "14.0.0"
-MIGRATION_NAME = "v14_knowledge_refresh"
+V15_VERSION = "15.0.0"
+MIGRATION_NAME = "v15_automation"
 
 
 def create_snapshot_backup(source: Path, target: Path) -> None:
-    """Create a verified snapshot backup using SQLite's backup API."""
     target.parent.mkdir(parents=True, exist_ok=True)
     src_conn = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
     dst_conn = sqlite3.connect(target)
@@ -42,12 +39,11 @@ def create_snapshot_backup(source: Path, target: Path) -> None:
         dst_conn.close()
 
 
-def is_v14_applied(db_path: Path) -> bool:
-    """Check if V14 migration has already been applied."""
+def is_v15_applied(db_path: Path) -> bool:
     con = sqlite3.connect(db_path)
     try:
         row = con.execute(
-            "SELECT 1 FROM schema_migrations WHERE version = ?", (V14_VERSION,)
+            "SELECT 1 FROM schema_migrations WHERE version = ?", (V15_VERSION,)
         ).fetchone()
         return row is not None
     except sqlite3.OperationalError:
@@ -56,15 +52,14 @@ def is_v14_applied(db_path: Path) -> bool:
         con.close()
 
 
-def ensure_provider_v13(db_path: Path) -> dict:
-    """Ensure V13 (provider) migration is applied first."""
-    from migrate_v13 import ensure_provider_v13 as _ensure_v13
-    return _ensure_v13(db_path, create_backup=False)
+def ensure_refresh_v14(db_path: Path) -> dict:
+    from migrate_v14 import ensure_refresh_v14 as _ensure_v14
+    return _ensure_v14(db_path, create_backup=False)
 
 
-def ensure_refresh_v14(db_path: Path, create_backup: bool = True) -> dict:
-    """Apply V14 migration: knowledge refresh tables."""
-    ensure_provider_v13(db_path)
+def ensure_automation_v15(db_path: Path, create_backup: bool = True) -> dict:
+    """Apply V15 migration: automation jobs + runs."""
+    ensure_refresh_v14(db_path)
 
     con = sqlite3.connect(db_path)
     con.execute("PRAGMA foreign_keys = ON")
@@ -73,13 +68,13 @@ def ensure_refresh_v14(db_path: Path, create_backup: bool = True) -> dict:
         if create_backup:
             backup_path = str(
                 db_path.parent.parent / "backups"
-                / f"medforge_pre_v14_backup_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}.db"
+                / f"medforge_pre_v15_backup_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}.db"
             )
             create_snapshot_backup(db_path, Path(backup_path))
 
         # executescript handles comments/embedded semicolons correctly (a naive
         # split(';') breaks on a ';' inside a '--' comment).
-        con.executescript(V14_SCHEMA_DDL)
+        con.executescript(V15_SCHEMA_DDL)
 
         con.execute(
             """
@@ -89,7 +84,7 @@ def ensure_refresh_v14(db_path: Path, create_backup: bool = True) -> dict:
                 name = excluded.name,
                 applied_at = excluded.applied_at
             """,
-            (V14_VERSION, MIGRATION_NAME, datetime.now(timezone.utc).isoformat()),
+            (V15_VERSION, MIGRATION_NAME, datetime.now(timezone.utc).isoformat()),
         )
 
         integrity = con.execute("PRAGMA integrity_check").fetchone()[0]
@@ -106,7 +101,7 @@ def ensure_refresh_v14(db_path: Path, create_backup: bool = True) -> dict:
             "foreign_key_errors": len(fk_check),
             "tables": len(tables),
             "backup": backup_path,
-            "version": V14_VERSION,
+            "version": V15_VERSION,
         }
     except Exception as e:
         con.rollback()
@@ -116,7 +111,7 @@ def ensure_refresh_v14(db_path: Path, create_backup: bool = True) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Apply V14 knowledge-refresh migration")
+    parser = argparse.ArgumentParser(description="Apply V15 automation migration")
     parser.add_argument("--db", type=Path, help="Path to medforge.sqlite3")
     parser.add_argument("--no-backup", action="store_true", help="Skip backup creation")
     args = parser.parse_args()
@@ -126,7 +121,7 @@ def main() -> None:
         print(f"Database not found: {db_path}", file=sys.stderr)
         sys.exit(1)
 
-    result = ensure_refresh_v14(db_path, create_backup=not args.no_backup)
+    result = ensure_automation_v15(db_path, create_backup=not args.no_backup)
     if result["success"]:
         print(f"Migration finished: success | integrity: {result['integrity']}")
         print(f"  Tables: {result['tables']}")

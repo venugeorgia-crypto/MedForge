@@ -644,3 +644,38 @@ CREATE TABLE knowledge_notifications (
 Applied by `core/database/migrate_v14.py::ensure_refresh_v14()` (chains
 V9→…→V14, verified backup at `backups/medforge_pre_v14_backup_*.db`).
 Rollback: drop the three tables. See `docs/KNOWLEDGE_REFRESH.md`.
+
+### Migration 15.0.0 (P14 — Automation)
+
+Adds two tables:
+
+```sql
+CREATE TABLE automation_jobs (
+    job_id      TEXT PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    schedule    TEXT NOT NULL DEFAULT '',
+    enabled     INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+    last_run_id TEXT NULL,
+    last_status TEXT NULL,
+    last_run_at TEXT NULL,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE automation_runs (
+    run_id       TEXT PRIMARY KEY,
+    job_id       TEXT NULL REFERENCES automation_jobs(job_id) ON DELETE SET NULL,
+    triggered_by TEXT NOT NULL CHECK(triggered_by IN ('scheduled','manual','backfill')),
+    dry_run      INTEGER NOT NULL DEFAULT 0 CHECK(dry_run IN (0,1)),
+    steps        TEXT NOT NULL DEFAULT '[]',
+    status       TEXT NOT NULL CHECK(status IN ('running','completed','failed')),
+    started_at   TEXT NOT NULL,
+    completed_at TEXT NULL,
+    error        TEXT NULL,
+    created_at   TEXT NOT NULL
+);
+```
+
+Applied by `core/database/migrate_v15.py::ensure_automation_v15()` (chains
+V9→…→V15, verified backup at `backups/medforge_pre_v15_backup_*.db`).
+Rollback: drop the two tables. See `docs/AUTOMATION.md`.

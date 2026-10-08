@@ -1067,6 +1067,44 @@ CREATE INDEX IF NOT EXISTS idx_notifications_ack ON knowledge_notifications(ackn
 
 V14_TABLES = ("source_refresh_log", "knowledge_refresh_runs", "knowledge_notifications")
 
+# V15 automation enums
+AUTOMATION_RUN_STATUSES = ("running", "completed", "failed")
+AUTOMATION_TRIGGERS = ("scheduled", "manual", "backfill")
+
+V15_SCHEMA_DDL = """
+-- 1. Automation jobs (one row per named workflow; the nightly job is default)
+CREATE TABLE IF NOT EXISTS automation_jobs (
+    job_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    schedule TEXT NOT NULL DEFAULT '',
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+    last_run_id TEXT NULL,
+    last_status TEXT NULL,
+    last_run_at TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_automation_jobs_name ON automation_jobs(name);
+
+-- 2. Automation runs (one row per execution; steps JSON keeps per-step detail)
+CREATE TABLE IF NOT EXISTS automation_runs (
+    run_id TEXT PRIMARY KEY,
+    job_id TEXT NULL REFERENCES automation_jobs(job_id) ON DELETE SET NULL,
+    triggered_by TEXT NOT NULL CHECK(triggered_by IN ('scheduled', 'manual', 'backfill')),
+    dry_run INTEGER NOT NULL DEFAULT 0 CHECK(dry_run IN (0, 1)),
+    steps TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed')),
+    started_at TEXT NOT NULL,
+    completed_at TEXT NULL,
+    error TEXT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_automation_runs_time ON automation_runs(started_at);
+CREATE INDEX IF NOT EXISTS idx_automation_runs_job ON automation_runs(job_id, started_at);
+"""
+
+V15_TABLES = ("automation_jobs", "automation_runs")
+
 # V3 Schema DDL statements
 V3_SCHEMA_DDL = """
 -- Migration tracking table
