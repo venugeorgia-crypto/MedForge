@@ -480,6 +480,36 @@ verifies `integrity_check` + `foreign_key_check`, optional verified backup at
 `backups/medforge_pre_v10_backup.db`). Rollback: drop the five new tables (no
 existing data is touched).
 
+## V11 Publication Workflow Tables (migration `11.0.0`)
+
+P10 content lifecycle. Additive: three new tables + seven nullable columns on
+`content_artifacts` (`publication_status` default `'UNREVIEWED'`, `approved_at`,
+`approved_by`, `published_at`, `published_path`, `retired_at`,
+`retired_reason`).
+
+- `review_queue` — findings from approval gates or reviewers:
+  review_id, content_id (FK CASCADE), artifact_id, issue_type, severity,
+  detected_reason, detected_by, review_status, reviewer, reviewed_at,
+  resolution, created_at, updated_at.
+- `review_history` — append-only audit trail: history_id, review_id,
+  action, reviewer, note, created_at.
+- `approval_records` — one batch per gate run: approval_id, content_id
+  (FK CASCADE), artifact_id, requested_status, gates (JSON), passed,
+  created_at.
+
+Enums: `PUBLICATION_STATUSES` (`UNREVIEWED/APPROVED/PUBLISHED/RETIRED/BLOCKED`),
+`REVIEW_SEVERITIES`, `REVIEW_STATUSES`, `REVIEW_ISSUE_TYPES`, `EXPORT_MODES`
+(`private/distributable`).
+
+Indexes: `idx_review_queue_content`, `idx_review_queue_status`,
+`idx_review_history_review`, `idx_approval_records_content`.
+
+Defined in `core/database/schema.py` (`V11_SCHEMA_DDL`); applied by
+`core/database/migrate_v11.py::ensure_publication_v11()` (idempotent, runs
+`ensure_study_v10` first, verified backup at
+`backups/medforge_pre_v11_backup.db`). Rollback: drop the three new tables.
+See `docs/PUBLICATION.md`.
+
 ### `PREREQUISITE_TYPES`
 `('strict', 'recommended', 'co-requisite')`
 

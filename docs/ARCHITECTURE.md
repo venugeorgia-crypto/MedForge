@@ -181,6 +181,18 @@
   uncited model output is discarded rather than stored
 - See `docs/PRODUCT_FACTORY.md`
 
+### 15. `medforge/publication.py` — Publication / Approval Workflow (P10, V11)
+- **Role**: formal gate between the P9 factory and any published output
+- **Gates**: nine deterministic checks over EVERY rendered artifact
+  (curriculum alignment, evidence coverage, P4 verdicts, citation continuity,
+  consistency checksums, medical-risk scan, copyright bound, formatting,
+  artifact generation); high-severity failure sets BLOCKED + review_queue row
+- **Lifecycle**: UNREVIEWED → NEEDS_REVIEW → APPROVED → PUBLISHED → RETIRED;
+  APPROVED requires a named reviewer and no open high/critical reviews
+- **Exports**: `private` (canonical content) vs `distributable` (artifacts +
+  locators only, refused on learner/prompt fields or long verbatim runs)
+- See `docs/PUBLICATION.md`
+
 ---
 
 ## Data Flow

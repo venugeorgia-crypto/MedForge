@@ -142,6 +142,25 @@ Still open after this phase (unchanged, not P9 scope): mechanism diagram, OCR,
 PDF tables/callouts, video renderer, provider abstraction, distributable bundle
 — see the rows below.
 
+## P10 (this phase) Publication / review / approval workflow — **IMPLEMENTED (V11)**
+
+> Numbering note: an older roadmap section below still labels "P10 product
+> factory / P11 PDF / P12 video" — that numbering is obsolete. The delivered
+> P10 is the publication/approval workflow below; execution results:
+> `docs/P10_MATRIX.md`, `docs/PUBLICATION.md`.
+
+| Requirement | Current | Source file | Actual behavior | Tests | Risk | Verdict |
+|---|---|---|---|---|---|---|
+| Formal content lifecycle | DRAFT/VALIDATING/NEEDS_REVIEW/APPROVED/PUBLISHED/RETIRED/BLOCKED on per-artifact rows | `medforge/publication.py` (V11) | `UNREVIEWED → NEEDS_REVIEW → APPROVED → PUBLISHED → RETIRED`; BLOCKED on any high-severity failure; content status = strictest artifact status | 20 P10 tests | Low | **DONE (`p10-publication-v1`)** |
+| Nine approval gates | all nine implemented and enforced over EVERY rendered artifact | `publication.py::run_approval_gates` | curriculum alignment, evidence coverage, P4 verdicts, citation continuity, consistency checksums, medical-risk scan, copyright bound (400 chars), formatting, artifact generation | gate-name + tamper tests | Low | **DONE** |
+| Medical safety: review-forcing, never self-approving | dose/contraindication/emergency/procedure/criteria/recommendation patterns force open reviews | `publication.py::HIGH_RISK_PATTERNS` | any hit blocks APPROVED until a named reviewer resolves/waives; automated runs can never approve risk | dedicated tests | Low | **DONE** |
+| Review queue + history | review_queue + append-only review_history + approval_records | V11 tables | idempotent findings per content+type+reason; resolution unblocks BLOCKED→NEEDS_REVIEW when no high issue remains | lifecycle tests | Low | **DONE** |
+| Private / distributable separation | export modes with hard refusals | `publication.py::export_bundle` | distributable refuses learner/prompt fields and >400-char verbatim runs; private carries canonical content; manifests record checksums | export tests + E2E | Low | **DONE** |
+| CLI surface | `publication run-gates|approve|publish|retire|state|queue|reviews|resolve|export` | `medforge_core.py` | verified on isolated demo home | CLI E2E | Low | **DONE** |
+
+Still open in P10 scope: dashboard Publication tab (CLI/engines complete;
+rendering-only work, no domain logic pending).
+
 ## P9 Spaced learning (original roadmap numbering)
 
 | Requirement | Current | Source file | Actual behavior | Tests | Risk | Verdict |
@@ -234,5 +253,5 @@ PDF tables/callouts, video renderer, provider abstraction, distributable bundle
 | Recency-weighted learner model (append-only `learning_attempts`, materialized `learner_model_state`, extended weakness columns, confidence calibration, prerequisite risk API, deterministic study priority, recalculation + versioning, CLI + dashboard LEARNER tab, V7 migration, tests) | P6 | **DONE** — see `docs/P6_MATRIX.md` execution results and `docs/LEARNER_MODEL.md`; 32 new tests, 126/126 passing; V7 applied to the live DB with verified backup `backups/medforge_pre_v7_backup.db` (all pre-existing row counts unchanged, integrity + foreign-key checks clean). Two CLI defects found during end-to-end validation and fixed. |
 | Interactive adaptive tutor (persistent stage machine, P6-driven target selection, evidence-first teaching with verification policy, 7 modes, deterministic + model-assisted grading, adaptation, misconceptions, learner events, session summary, spaced-repetition sync, prompt-injection containment, dashboard TUTOR tab, CLI, V8 migration, tests) | P7 | **DONE** — see `docs/P7_MATRIX.md` execution results and `docs/TUTOR.md`; 37 new tests, 163/163 passing; V8 applied to the live DB with verified backup `backups/medforge_pre_v8_backup.db` (all pre-existing row counts unchanged, integrity + foreign-key checks clean); live end-to-end session, abstention, recovery and dashboard runs recorded. Four real defects found during live validation and fixed (bare-constant crash in model-assisted teaching, `model_calls` undercount, cross-topic rubric contamination, duplicated evidence records). |
 | Study intelligence + product factory integration (orchestrator over curriculum/textbook/evidence/learner/tutor/assessment/SR, persistent plans + missions, canonical content + deterministic rendering, V10 migration, CLI + dashboard, tests) | P9 | **DONE** — see `docs/P9_MATRIX.md` execution results, `docs/STUDY_INTELLIGENCE.md` and `docs/PRODUCT_FACTORY.md`; 51 new tests, 261/261 passing; V10 applied to the live DB with verified backup `backups/medforge_pre_v10_backup.db` (40 → 45 tables, 438 → 439 rows, integrity + foreign-key checks clean); isolated end-to-end study loop, learner-adaptation, product-consistency, versioning, recovery, CLI and dashboard runs recorded. Eight real defects found by running the E2E and fixed (nested curriculum node resolution, tutor objective column, tutor goal vocabulary, ungrounded assessment items, empty 10-minute day, model-mode killed by a refs-only citation validator, adaptive re-render filename collision, and the pre-existing `status` command shadowing). |
-| Publication / approval workflow (who may publish what, bundles, approval gates) | P10 | **NOT STARTED — deliberately out of P9 scope. This is the exact next phase.** |
+| Publication / approval workflow (who may publish what, bundles, approval gates) | P10 | **DONE** — see `docs/P10_MATRIX.md` execution results and `docs/PUBLICATION.md`; 20 new tests, 286/286 passing; V11 applied to the live DB with verified backup `backups/medforge_pre_v11_backup.db` (45 → 48 tables, integrity + foreign-key checks clean, idempotent rerun verified); isolated E2E covering generate → render → nine gates → approve → publish both modes with private/distributable separation, plus CLI wiring (`publication` command) exercised end-to-end. |
 | Source hierarchy (P5), card links + leech rewrite, PDF/OCR upgrade, video renderer, provider abstraction, distributable bundle | P5–P15 | **NOT STARTED — planned in dependency order; each with its own WHY/WHAT/RISK/MIGRATION/TEST/ROLLBACK record at implementation time.** |

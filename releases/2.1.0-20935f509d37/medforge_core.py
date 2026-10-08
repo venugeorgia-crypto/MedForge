@@ -148,6 +148,8 @@ def main() -> None:
               "assessment item-info <item_id>[|<version>] | "
               "assessment stats <item_id>[|<version>] | "
               "assessment blueprint-new <title>|<scope_node>|<scope_type>[|<items>] | "
+              "study-intel ... | product-intel ... | "
+              "publication run-gates|approve|publish|retire|state|queue|reviews|resolve|export | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -726,6 +728,70 @@ def main() -> None:
             raise SystemExit(
                 "Usage: medforge_core product-intel build|status|inspect|artifacts|"
                 "provenance|consistency|regenerate"
+            )
+    elif cmd == "publication":
+        # P10 publication / review / approval workflow:
+        # publication run-gates <content_id>[|artifact_type] |
+        # publication approve <content_id>|<reviewer>[|artifact_type] |
+        # publication publish <content_id>[|private|distributable[|artifact_type]] |
+        # publication retire <content_id>|<reason>[|artifact_type] |
+        # publication state <content_id> | queue [status] | reviews [status] |
+        # publication resolve <review_id>|<reviewer>|<resolved|waived>[|note] |
+        # publication export <content_id>[|private|distributable[|artifact_type]]
+        from medforge import publication as PUB
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else ""
+        if action == "run-gates":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core publication run-gates <content_id>[|artifact_type]")
+            print(json.dumps(PUB.run_approval_gates(
+                parts[1], parts[2] if len(parts) > 2 and parts[2] else None), indent=2))
+        elif action == "approve":
+            if len(parts) < 3:
+                raise SystemExit("Usage: medforge_core publication approve <content_id>|<reviewer>[|artifact_type]")
+            print(json.dumps(PUB.approve_artifact(
+                parts[1], parts[2],
+                artifact_type=parts[3] if len(parts) > 3 and parts[3] else None), indent=2))
+        elif action == "publish":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core publication publish <content_id>[|mode|artifact_type]")
+            print(json.dumps(PUB.publish_artifact(
+                parts[1], mode=parts[2] if len(parts) > 2 and parts[2] else "distributable",
+                artifact_type=parts[3] if len(parts) > 3 and parts[3] else None), indent=2))
+        elif action == "retire":
+            if len(parts) < 3:
+                raise SystemExit("Usage: medforge_core publication retire <content_id>|<reason>[|artifact_type]")
+            print(json.dumps(PUB.retire_artifact(
+                parts[1], parts[2],
+                artifact_type=parts[3] if len(parts) > 3 and parts[3] else None), indent=2))
+        elif action == "state":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core publication state <content_id>")
+            print(json.dumps(PUB.get_publication_state(parts[1]), indent=2))
+        elif action in ("queue", "reviews"):
+            review_status = parts[1] if len(parts) > 1 and parts[1] else None
+            print(json.dumps(PUB.list_reviews(status=review_status), indent=2))
+        elif action == "resolve":
+            if len(parts) < 4:
+                raise SystemExit("Usage: medforge_core publication resolve <review_id>|<reviewer>|<resolved|waived>[|note]")
+            print(json.dumps(PUB.resolve_review(
+                parts[1], parts[2], parts[3],
+                note=parts[4] if len(parts) > 4 else ""), indent=2))
+        elif action == "export":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core publication export <content_id>[|mode|artifact_type]")
+            print(json.dumps(PUB.export_bundle(
+                parts[1], mode=parts[2] if len(parts) > 2 and parts[2] else "private",
+                artifact_type=parts[3] if len(parts) > 3 and parts[3] else None), indent=2))
+        else:
+            raise SystemExit(
+                "Usage: medforge_core publication run-gates|approve|publish|retire|"
+                "state|queue|reviews|resolve|export"
             )
     elif cmd == "migrate":
         with job_lock():

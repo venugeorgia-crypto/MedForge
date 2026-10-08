@@ -577,6 +577,16 @@ CONTENT_ARTIFACT_TYPES = (
 CONTENT_ARTIFACT_STATUSES = ("DRAFT", "VALIDATING", "READY", "NEEDS_REVIEW", "BLOCKED")
 ADAPTATION_PROFILES = ("weak", "developing", "strong", "underconfident", "overconfident")
 
+# ─── V11 publication/review enums ───
+PUBLICATION_STATUSES = ("UNREVIEWED", "APPROVED", "PUBLISHED", "RETIRED", "BLOCKED")
+REVIEW_SEVERITIES = ("low", "medium", "high", "critical")
+REVIEW_STATUSES = ("open", "resolved", "waived")
+REVIEW_ISSUE_TYPES = (
+    "medical_risk", "evidence_gap", "unsupported_claim", "contradicted_claim",
+    "citation_break", "consistency", "copyright", "formatting", "curriculum_gap",
+)
+EXPORT_MODES = ("private", "distributable")
+
 _AITYPE_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_ITEM_TYPES)
 _AISTATUS_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_ITEM_STATUSES)
 _AMODE_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_MODES)
@@ -884,6 +894,60 @@ CREATE TABLE IF NOT EXISTS content_artifacts (
 );
 CREATE INDEX IF NOT EXISTS idx_content_artifacts_content ON content_artifacts(content_id);
 CREATE INDEX IF NOT EXISTS idx_content_artifacts_topic_type ON content_artifacts(artifact_type);
+"""
+
+# V11 publication enums (SQL fragments)
+_PUBSQL = ", ".join(f"'{v}'" for v in PUBLICATION_STATUSES)
+_RSEVSQL = ", ".join(f"'{v}'" for v in REVIEW_SEVERITIES)
+_RSTATSQL = ", ".join(f"'{v}'" for v in REVIEW_STATUSES)
+_RITYPESQL = ", ".join(f"'{v}'" for v in REVIEW_ISSUE_TYPES)
+
+V11_SCHEMA_DDL = f"""
+-- 1. Detected issues needing human review (one row per issue)
+CREATE TABLE IF NOT EXISTS review_queue (
+    review_id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL REFERENCES content_items(content_id) ON DELETE CASCADE,
+    artifact_id TEXT NULL,
+    issue_type TEXT NOT NULL CHECK(issue_type IN ({_RITYPESQL})),
+    severity TEXT NOT NULL CHECK(severity IN ({_RSEVSQL})),
+    claim_ref TEXT NULL,
+    evidence_ref TEXT NULL,
+    detected_reason TEXT NOT NULL DEFAULT '',
+    detected_by TEXT NOT NULL DEFAULT 'gate',
+    review_status TEXT NOT NULL DEFAULT 'open' CHECK(review_status IN ({_RSTATSQL})),
+    reviewer TEXT NULL,
+    reviewed_at TEXT NULL,
+    resolution TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_review_queue_content ON review_queue(content_id, review_status);
+CREATE INDEX IF NOT EXISTS idx_review_queue_status ON review_queue(review_status, severity);
+
+-- 2. Append-only review decision history
+CREATE TABLE IF NOT EXISTS review_history (
+    history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    review_id TEXT NOT NULL REFERENCES review_queue(review_id) ON DELETE CASCADE,
+    action TEXT NOT NULL,
+    reviewer TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_review_history_review ON review_history(review_id);
+
+-- 3. One row per approval-gate evaluation batch (success OR failure)
+CREATE TABLE IF NOT EXISTS approval_records (
+    approval_id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL REFERENCES content_items(content_id) ON DELETE CASCADE,
+    artifact_id TEXT NULL,
+    requested_status TEXT NOT NULL,
+    gates TEXT NOT NULL DEFAULT '[]',
+    passed INTEGER NOT NULL DEFAULT 0 CHECK(passed IN (0, 1)),
+    reviewer TEXT NULL,
+    approved_at TEXT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_approval_records_content ON approval_records(content_id, created_at);
 """
 
 # V3 Schema DDL statements

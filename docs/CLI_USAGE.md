@@ -28,7 +28,7 @@ Commands: `product`, `ask`, `study`, `study-log`, `mastery [topic]`, `learner`,
 `import-cards`, `syllabus`, `curriculum`, `path`, `prereq`, `textbooks`,
 `textbook-add`, `textbook-info`, `textbook-link`, `textbook-evidence`, `claims`,
 `claim-info`, `verify-pack`, `evidence-status`, `tutor`, `assessment`,
-`study-intel`, `product-intel`, `migrate`, `doctor`, `status`.
+`study-intel`, `product-intel`, `publication`, `migrate`, `doctor`, `status`.
 
 ### `medforge product <topic>` — Generate Study Pack
 
@@ -635,6 +635,32 @@ medforge product-intel "regenerate|<content_id>"
 | `provenance <artifact_id>` | artifact → content item → evidence → source, with prompt version and sources digest. |
 | `consistency <content_id>` | Re-verifies every artifact's on-disk checksum (tamper detection). |
 | `regenerate <content_id>[|outdir]` | `regenerate_product()` — renders again from the **stored** canonical item and reports `regenerated` + version provenance; a changed source set produces a **new** `content_id`. |
+
+### `medforge publication "<action>|<args...>"` — Publication / Approval Workflow (P10)
+
+```bash
+medforge publication "run-gates|<content_id>"
+medforge publication "approve|<content_id>|Dr. Reviewer"
+medforge publication "publish|<content_id>|distributable"
+medforge publication "export|<content_id>|private"
+medforge publication "state|<content_id>"
+medforge publication "reviews"
+medforge publication "resolve|<review_id>|Dr. Reviewer|resolved|note"
+medforge publication "retire|<content_id>|superseded"
+```
+
+| Action | What it does |
+| --- | --- |
+| `run-gates <content_id>[\|artifact_type]` | Runs the nine deterministic approval gates over **every** rendered artifact; records findings + batch; sets `BLOCKED` on high-severity failure. |
+| `approve <content_id>\|<reviewer>` | Grants APPROVED — refused without a named reviewer, open high/critical reviews, or failing gates. |
+| `publish <content_id>[\|mode]` | Writes the export bundle and marks PUBLISHED; requires APPROVED. |
+| `retire <content_id>\|<reason>` | Marks all artifacts RETIRED with a reason. |
+| `state <content_id>` | Per-artifact lifecycle rows + open reviews + overall status. |
+| `queue/reviews [status]` | Review-queue listing (open/resolved/waived). |
+| `resolve <review_id>\|<reviewer>\|<resolved\|waived>[\|note]` | Reviewer decision; append-only history; unblocks BLOCKED content when no high issue remains. |
+| `export <content_id>[\|mode]` | `private` = canonical content + evidence detail; `distributable` = artifacts + locators only, **refused** on learner/prompt fields or >400-char verbatim runs. |
+
+See `docs/PUBLICATION.md`.
 
 Files land in `PRODUCTS/<topic-slug>/p9/`, one per (artifact type, adaptation
 profile) — `<type>.md` for the default `developing` profile, otherwise
