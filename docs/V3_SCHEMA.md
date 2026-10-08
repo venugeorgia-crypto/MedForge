@@ -561,3 +561,34 @@ Applied by `core/database/migrate_v12.py::ensure_video_v12()` (chains
 V9→V10→V11→V12, verified backup at
 `backups/medforge_pre_v12_backup.db`). Rollback: drop `video_renders`.
 See `docs/VIDEO.md`.
+
+### Migration 13.0.0 (P12 — Provider Abstraction + Model Router)
+
+Adds the `model_runs` audit table:
+
+```sql
+CREATE TABLE model_runs (
+    run_id         TEXT PRIMARY KEY,
+    task           TEXT NOT NULL CHECK(task IN ('teaching','grading','generation','assessment','reasoning','general','embedding')),
+    model          TEXT NOT NULL,
+    provider       TEXT NOT NULL CHECK(provider IN ('ollama','lmstudio','openai','mock')),
+    provider_display TEXT NOT NULL DEFAULT '',
+    content_id     TEXT NULL REFERENCES content_items(content_id) ON DELETE SET NULL,
+    tokens_in      INTEGER NOT NULL DEFAULT 0 CHECK(tokens_in >= 0),
+    tokens_out     INTEGER NOT NULL DEFAULT 0 CHECK(tokens_out >= 0),
+    latency_ms     INTEGER NOT NULL DEFAULT 0 CHECK(latency_ms >= 0),
+    success        INTEGER NOT NULL DEFAULT 0 CHECK(success IN (0, 1)),
+    error          TEXT NULL,
+    model_size_gb  REAL NULL,
+    model_context  INTEGER NULL,
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX idx_model_runs_task ON model_runs(task, created_at);
+CREATE INDEX idx_model_runs_content ON model_runs(content_id);
+CREATE INDEX idx_model_runs_provider ON model_runs(provider, model);
+```
+
+Applied by `core/database/migrate_v13.py::ensure_provider_v13()` (chains
+V9→V10→V11→V12→V13, verified backup at
+`backups/medforge_pre_v13_backup_*.db`). Rollback: drop `model_runs`.
+See `docs/PROVIDERS.md` (to be created).

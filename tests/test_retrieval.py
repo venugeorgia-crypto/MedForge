@@ -129,8 +129,14 @@ def test_vector_results_requires_ollama(test_db):
         with pytest.raises(Exception):
             vector_results("heart", limit=5)
     else:
-        results = vector_results("heart", limit=5)
-        assert isinstance(results, list)
+        try:
+            results = vector_results("heart", limit=5)
+            assert isinstance(results, list)
+        except RuntimeError as e:
+            # Ollama might be running without embeddings support (501 error)
+            if "501" in str(e) or "embeddings" in str(e).lower():
+                pytest.skip("Ollama running without embeddings support")
+            raise
 
 
 if __name__ == "__main__":

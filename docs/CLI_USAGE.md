@@ -708,6 +708,46 @@ reporting success, and takes a verified snapshot into `backups/` unless
 
 ---
 
+### `medforge provider` — Provider / Model Router (P12)
+
+Manage model providers and router selection.
+
+```bash
+medforge provider list              # List available providers
+medforge provider models            # List installed models
+medforge provider pull <model>      # Download a model
+medforge provider remove <model>    # Remove a model
+medforge provider info <model>      # Show model metadata
+medforge provider test <model>      # Test chat with a model
+medforge provider chat <model> "prompt" [system]
+medforge provider embed <model> "text1" ["text2" ...]
+medforge provider select <task>     # Router selection for task
+```
+
+| Command | What it does |
+| --- | --- |
+| `provider list` | Shows available providers (`ollama`, `mock`, `openai` if configured) |
+| `provider models` | Lists installed models from active provider |
+| `provider pull <model>` | Downloads model via provider (respects offline mode) |
+| `provider remove <model>` | Removes model from provider |
+| `provider info <model>` | Shows size, context, capabilities, provider |
+| `provider test <model>` | Quick chat test ("Reply with OK") |
+| `provider chat <model> "prompt" [system]` | Direct chat completion |
+| `provider embed <model> "text"...` | Generate embeddings |
+| `provider select <task>` | Shows router's choice for task (`teaching`, `grading`, `generation`, `assessment`, `reasoning`, `general`, `embedding`) |
+
+Environment control:
+- `MEDFORGE_PROVIDER=ollama|lmstudio|openai` (default: `ollama`)
+- `MEDFORGE_CHAT_MODEL=<name>` — override router chat selection
+- `MEDFORGE_EMBED_MODEL=<name>` — override router embed selection
+- `MEDFORGE_OPENAI_API_KEY` — required for OpenAI provider
+- `MEDFORGE_MODEL_SIZE_GB=3.6` — hardware size limit (default 3.6 GB for 8 GB M1)
+- `MEDFORGE_OFFLINE=1` — blocks cloud providers and model downloads
+
+See `docs/PROVIDERS.md`.
+
+---
+
 ### `medforge dashboard` — Web UI
 
 Launch the Streamlit dashboard (loopback only, random port 8501-8520).
@@ -770,6 +810,11 @@ Automatic search of trusted medical domains (8 results).
 | `MEDFORGE_OFFLINE` | `0` | Disable network research (also disables tutor model use) |
 | `MEDFORGE_TUTOR_AUTO_MODEL` | `1` | Let the tutor use the local chat model for teaching + free-text grading |
 | `MEDFORGE_ASSESSMENT_AUTO_MODEL` | `1` | Let assessment free-text grading use the local chat model |
+| `MEDFORGE_PROVIDER` | `ollama` | Model provider: `ollama`, `lmstudio`, `openai` (explicit opt-in) |
+| `MEDFORGE_CHAT_MODEL` | (auto) | Explicit chat model override |
+| `MEDFORGE_EMBED_MODEL` | `embeddinggemma` | Explicit embedding model override |
+| `MEDFORGE_OPENAI_API_KEY` | (none) | Required for OpenAI provider |
+| `MEDFORGE_MODEL_SIZE_GB` | `3.6` | Max model size for 8 GB machines |
 
 ---
 

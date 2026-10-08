@@ -978,6 +978,35 @@ CREATE INDEX IF NOT EXISTS idx_video_renders_content ON video_renders(content_id
 CREATE INDEX IF NOT EXISTS idx_video_renders_status ON video_renders(status);
 """
 
+# V13 provider abstraction enums
+PROVIDER_TYPES = ("ollama", "lmstudio", "openai", "mock")
+MODEL_RUN_TASKS = ("teaching", "grading", "generation", "assessment", "reasoning", "general", "embedding")
+
+V13_SCHEMA_DDL = """
+-- P12 provider abstraction: model run audit trail
+CREATE TABLE IF NOT EXISTS model_runs (
+    run_id TEXT PRIMARY KEY,
+    task TEXT NOT NULL CHECK(task IN ('teaching', 'grading', 'generation', 'assessment', 'reasoning', 'general', 'embedding')),
+    model TEXT NOT NULL,
+    provider TEXT NOT NULL CHECK(provider IN ('ollama', 'lmstudio', 'openai', 'mock')),
+    provider_display TEXT NOT NULL DEFAULT '',
+    content_id TEXT NULL REFERENCES content_items(content_id) ON DELETE SET NULL,
+    tokens_in INTEGER NOT NULL DEFAULT 0 CHECK(tokens_in >= 0),
+    tokens_out INTEGER NOT NULL DEFAULT 0 CHECK(tokens_out >= 0),
+    latency_ms INTEGER NOT NULL DEFAULT 0 CHECK(latency_ms >= 0),
+    success INTEGER NOT NULL DEFAULT 0 CHECK(success IN (0, 1)),
+    error TEXT NULL,
+    model_size_gb REAL NULL,
+    model_context INTEGER NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_model_runs_task ON model_runs(task, created_at);
+CREATE INDEX IF NOT EXISTS idx_model_runs_content ON model_runs(content_id);
+CREATE INDEX IF NOT EXISTS idx_model_runs_provider ON model_runs(provider, model);
+"""
+
+V13_TABLES = ("model_runs",)
+
 # V3 Schema DDL statements
 V3_SCHEMA_DDL = """
 -- Migration tracking table
