@@ -153,6 +153,7 @@ def main() -> None:
               "video render|state|probe | "
               "refresh check|status|notifications|ack|reverify | "
               "nightly [run|dry-run|only|runs|status] | schedule install|status|uninstall | "
+              "diagnose [full|verify-backup|restore|repair] | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -920,6 +921,40 @@ def main() -> None:
             print(json.dumps(AUTO.schedule_status(), indent=2, default=str))
         else:
             raise SystemExit("Usage: medforge_core schedule install|status|uninstall")
+    elif cmd == "diagnose":
+        # P15 diagnostics / recovery / repair:
+        # diagnose [full] | diagnose verify-backup <path> |
+        # diagnose restore <backup>[|target] | diagnose repair [|vacuum]
+        from medforge import doctor as DOC
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else "full"
+        if action in ("", "full"):
+            report = DOC.diagnose()
+            print(json.dumps(report, indent=2, default=str))
+            if not report.get("healthy"):
+                sys.exit(1)
+        elif action == "verify-backup":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core diagnose verify-backup <path>")
+            print(json.dumps(DOC.verify_backup(parts[1]), indent=2, default=str))
+        elif action == "restore":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core diagnose restore <backup>[|target]")
+            target = parts[2] if len(parts) > 2 and parts[2] else None
+            print(json.dumps(DOC.restore_backup(parts[1], target_db=target),
+                             indent=2, default=str))
+        elif action == "repair":
+            vacuum = len(parts) > 1 and parts[1].lower() == "vacuum"
+            print(json.dumps(DOC.repair(vacuum=vacuum), indent=2, default=str))
+        else:
+            raise SystemExit(
+                "Usage: medforge_core diagnose [full]|verify-backup|restore|repair"
+            )
     elif cmd == "migrate":
         with job_lock():
             print(json.dumps(migrate_database(), indent=2))

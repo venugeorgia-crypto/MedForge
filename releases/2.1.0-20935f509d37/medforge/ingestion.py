@@ -200,6 +200,8 @@ def _resolve_and_validate(url: str) -> str:
     host = parsed.hostname or ""
     if not host:
         raise ValueError("URL has no hostname")
+    if parsed.username or parsed.password:
+        raise ValueError("Credentials in URLs are not allowed")
     if parsed.port not in (None, 443):
         raise ValueError("Only port 443 is allowed")
     host_lower = host.lower().removeprefix("www.")

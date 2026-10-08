@@ -746,14 +746,36 @@ add. See `docs/AUTOMATION.md`.
 
 ---
 
+### `medforge diagnose "[action|args...]"` — Diagnostics, Recovery & Repair (P15)
+
+```bash
+medforge diagnose                              # full health report (JSON)
+medforge diagnose verify-backup <path>         # verify a backup read-only
+medforge diagnose "restore|<backup>|<target>"  # restore (target optional)
+medforge diagnose repair                       # quick_check + FTS re-derivation
+medforge diagnose "repair|vacuum"              # also VACUUM when disk allows
+```
+
+| Action | What it does |
+| --- | --- |
+| `diagnose` (or `full`) | Schema versions (numeric), pending migrations, integrity, foreign keys, tables, disk free, backup inventory (newest verified), provider reachability. Exits `1` when `healthy` is false. |
+| `verify-backup <path>` | Read-only open + integrity + table/version report. |
+| `restore <backup>[\|target]` | Refuses unverified files; keeps a `backups/medforge_prerestore_<ts>.db` safety copy of the current DB; verifies the restored file. Restart running processes afterwards. |
+| `repair [\|vacuum]` | `quick_check`, then re-derives the `chunks_fts` index from `chunks`; `vacuum` only runs when free disk ≥ 2× the database size. |
+
+See `docs/OPERATIONS.md` for recovery procedures and `docs/SECURITY.md` for
+the hardening inventory.
+
+---
+
 ### `medforge migrate` — Run V3 Migration
 
 Explicitly run the V3 database migration (normally auto-run on first use).
-V4–V14 migrations (curriculum, textbook provenance, evidence graph,
+V4–V15 migrations (curriculum, textbook provenance, evidence graph,
 recency-weighted learner model, interactive tutor, assessment engine,
 study intelligence / product factory, publication, video, provider router,
-knowledge refresh) run automatically on first use of their feature, or
-explicitly via their runners:
+knowledge refresh, automation) run automatically on first use of their feature,
+or explicitly via their runners:
 
 ```bash
 medforge migrate
@@ -767,6 +789,9 @@ medforge migrate
 .venv-v2.1/bin/python -m core.database.migrate_v15 --db database/medforge.sqlite3
 ```
 
+P15 adds **no** migration: hardening changed behaviour only, so the schema stays
+at `15.0.0`.
+
 Every runner verifies `integrity_check` and `foreign_key_check` before
 reporting success, and takes a verified snapshot into `backups/` unless
 `--no-backup` is passed. All are additive and idempotent: re-running is a no-op.
@@ -775,7 +800,10 @@ reporting success, and takes a verified snapshot into `backups/` unless
 
 ### `medforge provider` — Provider / Model Router (P12)
 
-Manage model providers and router selection.
+Manage model providers and router selection. An OpenAI-compatible provider is
+available **only** when `MEDFORGE_PROVIDER=openai` **and**
+`MEDFORGE_OPENAI_API_KEY` are both set; it is never registered by default and
+refuses to run offline. Local-first remains the default.
 
 ```bash
 medforge provider list              # List available providers
