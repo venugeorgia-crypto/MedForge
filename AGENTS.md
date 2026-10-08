@@ -76,12 +76,13 @@ AUDIT → REQUIREMENTS → ACCEPTANCE TESTS → SMALLEST SAFE PATCH → TEST
 
 ## Current state (update this block when a phase lands)
 
-- Implemented: P2, P3, P4, P6, P7, P8, P9, P10.
-- Migration: `11.0.0` (additive; V10 = study plans/missions/actions,
+- Implemented: P2, P3, P4, P6, P7, P8, P9, P10, P11.
+- Migration: `12.0.0` (additive; V10 = study plans/missions/actions,
   content items/artifacts; V11 = review_queue/review_history/approval_records
-  + publication lifecycle columns on content_artifacts).
-- Tests: 286 passing.
-- Pending phases: P11 video, P12 provider router, P13 knowledge refresh,
+  + publication lifecycle columns on content_artifacts;
+  V12 = video_renders).
+- Tests: 300 passing.
+- Pending phases: P12 provider router, P13 knowledge refresh,
   P14 automation, P15 hardening, P16 evaluation, P17 packaging,
   P18 production readiness.
 

@@ -668,6 +668,25 @@ profile) — `<type>.md` for the default `developing` profile, otherwise
 
 ---
 
+### `medforge video "<action>|<args...>"` — Professional Medical Video (P11)
+
+```bash
+medforge video "render|<content_id>"
+medforge video "render|<content_id>|16:9,9:16"
+medforge video "state|<content_id>"
+medforge video "probe|/path/to/video.mp4"
+```
+
+| Action | What it does |
+| --- | --- |
+| `render <content_id>[\|aspects]` | Full pipeline: storyboard → frames → TTS → ffmpeg → QA → captions → persist. Aspects: `16:9,9:16,1:1` (default: all three). |
+| `state <content_id>` | Persisted `video_renders` rows for this content item. |
+| `probe <path>` | ffprobe validation of any MP4 (container, codec, dims, audio, duration, clean decode). |
+
+See `docs/VIDEO.md`.
+
+---
+
 ### `medforge migrate` — Run V3 Migration
 
 Explicitly run the V3 database migration (normally auto-run on first use).

@@ -587,6 +587,10 @@ REVIEW_ISSUE_TYPES = (
 )
 EXPORT_MODES = ("private", "distributable")
 
+# ─── V12 video production enums ───
+VIDEO_STATUSES = ("queued", "rendering", "READY", "FAILED")
+VIDEO_ASPECTS = ("16:9", "9:16", "1:1")
+
 _AITYPE_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_ITEM_TYPES)
 _AISTATUS_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_ITEM_STATUSES)
 _AMODE_SQL = ", ".join(f"'{v}'" for v in ASSESSMENT_MODES)
@@ -948,6 +952,30 @@ CREATE TABLE IF NOT EXISTS approval_records (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_approval_records_content ON approval_records(content_id, created_at);
+"""
+
+V12_SCHEMA_DDL = """
+-- P11 video production: one row per (content item, aspect) render attempt.
+CREATE TABLE IF NOT EXISTS video_renders (
+    video_id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL REFERENCES content_items(content_id) ON DELETE CASCADE,
+    aspect TEXT NOT NULL CHECK(aspect IN ('16:9', '9:16', '1:1')),
+    status TEXT NOT NULL CHECK(status IN ('queued', 'rendering', 'READY', 'FAILED')),
+    path TEXT NULL,
+    manifest_path TEXT NULL,
+    duration_s REAL NULL,
+    width INTEGER NULL,
+    height INTEGER NULL,
+    size_bytes INTEGER NULL,
+    scene_count INTEGER NULL,
+    renderer_version TEXT NULL,
+    storyboard_checksum TEXT NULL,
+    error TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_video_renders_content ON video_renders(content_id);
+CREATE INDEX IF NOT EXISTS idx_video_renders_status ON video_renders(status);
 """
 
 # V3 Schema DDL statements

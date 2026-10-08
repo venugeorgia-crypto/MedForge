@@ -527,3 +527,37 @@ See `docs/PUBLICATION.md`.
 
 ### `MEDICAL_PUBLICATION_TYPES`
 `('Guideline', 'Textbook', 'Meta-Analysis', 'Research', 'Educational')`
+
+### Migration 12.0.0 (P11 — Video Production)
+
+Adds the `video_renders` table:
+
+```sql
+CREATE TABLE video_renders (
+    video_id            TEXT PRIMARY KEY,
+    content_id          TEXT NOT NULL REFERENCES content_items(content_id) ON DELETE CASCADE,
+    aspect              TEXT NOT NULL CHECK (aspect IN ('16:9','9:16','1:1')),
+    status              TEXT NOT NULL CHECK (status IN ('RENDERING','READY','FAILED')),
+    path                TEXT,
+    duration_s          REAL,
+    width               INTEGER,
+    height              INTEGER,
+    size_bytes          INTEGER,
+    checksum            TEXT,
+    srt_path            TEXT,
+    vtt_path            TEXT,
+    manifest_path       TEXT,
+    storyboard_checksum TEXT,
+    scene_count         INTEGER,
+    error               TEXT,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (content_id, aspect)
+);
+CREATE INDEX idx_video_renders_content ON video_renders(content_id);
+CREATE INDEX idx_video_renders_status  ON video_renders(status);
+```
+
+Applied by `core/database/migrate_v12.py::ensure_video_v12()` (chains
+V9→V10→V11→V12, verified backup at
+`backups/medforge_pre_v12_backup.db`). Rollback: drop `video_renders`.
+See `docs/VIDEO.md`.

@@ -150,6 +150,7 @@ def main() -> None:
               "assessment blueprint-new <title>|<scope_node>|<scope_type>[|<items>] | "
               "study-intel ... | product-intel ... | "
               "publication run-gates|approve|publish|retire|state|queue|reviews|resolve|export | "
+              "video render|state|probe | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -792,6 +793,36 @@ def main() -> None:
             raise SystemExit(
                 "Usage: medforge_core publication run-gates|approve|publish|retire|"
                 "state|queue|reviews|resolve|export"
+            )
+    elif cmd == "video":
+        # P11 professional medical video production:
+        # video render <content_id>[|aspects] | video state <content_id> | video probe <path>
+        from medforge import video as VID
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else ""
+        if action == "render":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core video render <content_id>[|16:9,9:16,1:1]")
+            aspects = [a.strip() for a in parts[2].split(",") if a.strip()] \
+                if len(parts) > 2 and parts[2] else None
+            print(json.dumps(VID.render_video(parts[1], aspects=tuple(aspects) if aspects else None), indent=2))
+        elif action == "state":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core video state <content_id>")
+            print(json.dumps(VID.get_video_state(parts[1]), indent=2))
+        elif action == "probe":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core video probe <video_path>")
+            from pathlib import Path
+            print(json.dumps(VID.probe_video(Path(parts[1])), indent=2))
+        else:
+            raise SystemExit(
+                "Usage: medforge_core video render|state|probe"
             )
     elif cmd == "migrate":
         with job_lock():
