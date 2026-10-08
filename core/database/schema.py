@@ -1007,6 +1007,66 @@ CREATE INDEX IF NOT EXISTS idx_model_runs_provider ON model_runs(provider, model
 
 V13_TABLES = ("model_runs",)
 
+# V14 knowledge refresh enums
+REFRESH_SOURCE_TYPES = ("textbook", "pubmed", "web", "course_pdf")
+REFRESH_CHECK_STATUSES = ("ok", "changed", "error", "skipped")
+REFRESH_TRIGGERS = ("scheduled", "manual", "webhook")
+NOTIFICATION_SEVERITIES = ("info", "warning", "critical")
+
+V14_SCHEMA_DDL = """
+-- 1. Per-source refresh tracking (one row per check)
+CREATE TABLE IF NOT EXISTS source_refresh_log (
+    refresh_id TEXT PRIMARY KEY,
+    source_type TEXT NOT NULL CHECK(source_type IN ('textbook', 'pubmed', 'web', 'course_pdf')),
+    source_id TEXT NOT NULL,
+    last_checked_at TEXT NOT NULL,
+    last_content_hash TEXT NULL,
+    last_etag TEXT NULL,
+    last_pmid_list TEXT NULL,
+    status TEXT NOT NULL CHECK(status IN ('ok', 'changed', 'error', 'skipped')),
+    changes_detected INTEGER NOT NULL DEFAULT 0 CHECK(changes_detected >= 0),
+    error_msg TEXT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_refresh_log_source ON source_refresh_log(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_log_time ON source_refresh_log(last_checked_at);
+
+-- 2. Knowledge refresh runs (audit trail for each orchestration)
+CREATE TABLE IF NOT EXISTS knowledge_refresh_runs (
+    run_id TEXT PRIMARY KEY,
+    triggered_by TEXT NOT NULL CHECK(triggered_by IN ('scheduled', 'manual', 'webhook')),
+    sources_checked INTEGER NOT NULL DEFAULT 0 CHECK(sources_checked >= 0),
+    sources_changed INTEGER NOT NULL DEFAULT 0 CHECK(sources_changed >= 0),
+    claims_reverified INTEGER NOT NULL DEFAULT 0 CHECK(claims_reverified >= 0),
+    claims_upgraded INTEGER NOT NULL DEFAULT 0 CHECK(claims_upgraded >= 0),
+    claims_downgraded INTEGER NOT NULL DEFAULT 0 CHECK(claims_downgraded >= 0),
+    notifications_created INTEGER NOT NULL DEFAULT 0 CHECK(notifications_created >= 0),
+    started_at TEXT NOT NULL,
+    completed_at TEXT NULL,
+    status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed')),
+    error_msg TEXT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_refresh_runs_time ON knowledge_refresh_runs(started_at);
+CREATE INDEX IF NOT EXISTS idx_refresh_runs_status ON knowledge_refresh_runs(status);
+
+-- 3. Notifications produced by refresh runs (UI/dashboard)
+CREATE TABLE IF NOT EXISTS knowledge_notifications (
+    notification_id TEXT PRIMARY KEY,
+    refresh_run_id TEXT NULL REFERENCES knowledge_refresh_runs(run_id) ON DELETE SET NULL,
+    source_type TEXT NOT NULL CHECK(source_type IN ('textbook', 'pubmed', 'web', 'course_pdf')),
+    source_id TEXT NOT NULL,
+    change_summary TEXT NOT NULL DEFAULT '',
+    affected_claims INTEGER NOT NULL DEFAULT 0 CHECK(affected_claims >= 0),
+    severity TEXT NOT NULL CHECK(severity IN ('info', 'warning', 'critical')),
+    acknowledged INTEGER NOT NULL DEFAULT 0 CHECK(acknowledged IN (0, 1)),
+    acknowledged_at TEXT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_ack ON knowledge_notifications(acknowledged, created_at);
+"""
+
+V14_TABLES = ("source_refresh_log", "knowledge_refresh_runs", "knowledge_notifications")
+
 # V3 Schema DDL statements
 V3_SCHEMA_DDL = """
 -- Migration tracking table

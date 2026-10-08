@@ -177,6 +177,33 @@ Documentation: `docs/VIDEO.md`; audit + execution results: `docs/P11_MATRIX.md`.
 | CLI surface | `video render|state|probe` | `medforge_core.py` | Verified on isolated demo home | CLI E2E | Low | **DONE** |
 | E2E real MP4 evidence | three aspects rendered, ffprobe-validated, evidence JSON | `/tmp/mf-p10-demo/e2e_p11_result.json` | h264/aac, clean decode, correct dims, ~40s, 864–977 KB each | manual + automated | Low | **DONE** |
 
+## P12 (this phase) Provider abstraction + model router — **IMPLEMENTED (V13)**
+
+Documentation: `docs/P12_MATRIX.md`.
+
+| Requirement | Current | Source file | Actual behavior | Tests | Risk | Verdict |
+|---|---|---|---|---|---|---|
+| Provider protocol + registry | `Provider` protocol; Ollama (default local) + Mock (testing); OpenAI only on explicit opt-in | `medforge/providers.py` | Loopback-only for Ollama; cloud never default | 27 P12 tests | Low | **DONE (`p12-router-v1`)** |
+| Task-aware model router | teaching→largest context, grading→smallest, reasoning→thinking-capable, embedding→embed models; size guard | `medforge/router.py` | `MEDFORGE_CHAT_MODEL`/`MEDFORGE_EMBED_MODEL` overrides; `MEDFORGE_MODEL_SIZE_GB` (3.6 default) | yes | Low | **DONE** |
+| Backward compatibility | `models.py` public functions are thin wrappers over provider+router | `medforge/models.py` | All legacy callers unchanged; full regression green | full suite | Low | **DONE** |
+| Model-run auditing | `model_runs` table (task, provider, model, latency, success) | V13 migration | Additive + idempotent; `record_model_run` records metadata | migration tests | Low | **DONE** |
+
+## P13 (this phase) Knowledge refresh + source update system — **IMPLEMENTED (V14)**
+
+Documentation: `docs/KNOWLEDGE_REFRESH.md`; audit + execution results:
+`docs/P13_MATRIX.md`.
+
+| Requirement | Current | Source file | Actual behavior | Tests | Risk | Verdict |
+|---|---|---|---|---|---|---|
+| Textbook change detection | file sha256 vs stored edition hash → new P3 edition (old preserved) + chunk diff | `medforge/knowledge_refresh.py::check_textbook_updates`, `diff_textbook_editions` | Re-registration carries stored document metadata so identity survives; chunk add/remove counts reported | 18 P13 tests | Low | **DONE (`p13-refresh-v1`)** |
+| PubMed / web change detection | PMID-set diff (injectable fetcher); conditional GET (ETag / body hash) | `check_pubmed_updates`, `check_web_updates` | Network sources skipped under `MEDFORGE_OFFLINE`; web fetch reuses P1 SSRF validation | yes | Low | **DONE** |
+| Claim re-verification | bounded candidates from the new edition → P4 `verify_claim`; upgrade/downgrade accounting | `reverify_claims_for_document` | Zero candidates → deterministic abstention with zero model calls; P4 history append-only | yes | Low | **DONE** |
+| Audit trail + notifications | one log row per check; one run row per orchestration; notifications with severity + acknowledgement | V14 tables + `run_refresh` | Skipped checks are not logged as source state; errors recorded, never hidden | yes | Low | **DONE** |
+| CLI | `refresh check|status|notifications|ack|reverify` | `medforge_core.py` | Verified end-to-end on an isolated home | CLI E2E | Low | **DONE** |
+
+Remaining honest limitations: no scheduler installer (P14 owns automation);
+PubMed compares PMID sets, not revised abstracts; PDF diffs are chunk-level.
+
 ## P9 Spaced learning (original roadmap numbering)
 
 | Requirement | Current | Source file | Actual behavior | Tests | Risk | Verdict |
@@ -272,4 +299,5 @@ Documentation: `docs/VIDEO.md`; audit + execution results: `docs/P11_MATRIX.md`.
 | Publication / approval workflow (who may publish what, bundles, approval gates) | P10 | **DONE** — see `docs/P10_MATRIX.md` execution results and `docs/PUBLICATION.md`; 20 new tests, 286/286 passing; V11 applied to the live DB with verified backup `backups/medforge_pre_v11_backup.db` (45 → 48 tables, integrity + foreign-key checks clean, idempotent rerun verified); isolated E2E covering generate → render → nine gates → approve → publish both modes with private/distributable separation, plus CLI wiring (`publication` command) exercised end-to-end. |
 | Professional medical video production (storyboard, frames, TTS, ffmpeg, ffprobe QA, captions, V12 migration) | P11 | **DONE** — see `docs/P11_MATRIX.md` execution results and `docs/VIDEO.md`; 14 new tests, 300/300 passing; V12 applied to the live DB with verified backup `backups/medforge_pre_v12_backup.db` (48 → 49 tables, integrity + foreign-key checks clean, idempotent rerun verified); isolated E2E on `/tmp/mf-p10-demo` covering three aspects (16:9/9:16/1:1) with real `say` TTS, ffprobe-validated MP4s, evidence recorded at `/tmp/mf-p10-demo/e2e_p11_result.json`; CLI wiring (`video` command) exercised end-to-end. |
 | Provider abstraction + model router (protocol, Ollama/Mock providers, task-aware router, V13 migration, backward compat) | P12 | **DONE** — see `docs/P12_MATRIX.md` execution results; 27 new tests, 326 passed + 1 skipped; V13 applied to the live DB with verified backup `backups/medforge_pre_v13_backup_20261008T194212.db` (49 → 50 tables, integrity + foreign-key checks clean, idempotent rerun verified); `medforge/models.py` rewritten as thin wrappers delegating to provider/router; CLI `provider` command added. |
-| Source hierarchy (P5), card links + leech rewrite, PDF/OCR upgrade, distributable bundle, automation, hardening, evaluation, packaging, final readiness | P5, P13–P18 | **NOT STARTED — planned in dependency order; each with its own WHY/WHAT/RISK/MIGRATION/TEST/ROLLBACK record at implementation time.** |
+| Knowledge refresh + source update system (textbook hash detection + new editions, PubMed/web checks, P4 claim re-verification, notifications, V14 migration) | P13 | **DONE** — see `docs/P13_MATRIX.md` execution results and `docs/KNOWLEDGE_REFRESH.md`; 18 new tests, 344 passed + 1 skipped; V14 applied to the live DB with verified backup `backups/medforge_pre_v14_backup_20261008T202940.db` (49 → 52 tables, integrity + foreign-key checks clean, idempotent rerun verified); isolated E2E on `/tmp/mf-p13-demo` (evidence `/tmp/mf-p13-demo/e2e_p13_result.json`) covering register → check(ok) → file change → new edition + chunk diff + notification → ack → reverify; CLI `refresh` command exercised end-to-end. Three real defects found by tests and fixed (duplicate refresh ids from second-hash uids, metadata-loss splitting a document on re-registration, and same-second tie-breaks in latest-edition/last-check selection). |
+| Source hierarchy (P5), card links + leech rewrite, PDF/OCR upgrade, distributable bundle, automation, hardening, evaluation, packaging, final readiness | P5, P14–P18 | **NOT STARTED — planned in dependency order; each with its own WHY/WHAT/RISK/MIGRATION/TEST/ROLLBACK record at implementation time.** |

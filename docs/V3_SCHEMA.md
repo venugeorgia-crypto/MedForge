@@ -591,4 +591,56 @@ CREATE INDEX idx_model_runs_provider ON model_runs(provider, model);
 Applied by `core/database/migrate_v13.py::ensure_provider_v13()` (chains
 V9→V10→V11→V12→V13, verified backup at
 `backups/medforge_pre_v13_backup_*.db`). Rollback: drop `model_runs`.
-See `docs/PROVIDERS.md` (to be created).
+See `docs/P12_MATRIX.md`.
+
+### Migration 14.0.0 (P13 — Knowledge Refresh + Source Update)
+
+Adds three tables (all additive):
+
+```sql
+CREATE TABLE source_refresh_log (
+    refresh_id        TEXT PRIMARY KEY,
+    source_type       TEXT NOT NULL CHECK(source_type IN ('textbook','pubmed','web','course_pdf')),
+    source_id         TEXT NOT NULL,
+    last_checked_at   TEXT NOT NULL,
+    last_content_hash TEXT NULL,
+    last_etag         TEXT NULL,
+    last_pmid_list    TEXT NULL,
+    status            TEXT NOT NULL CHECK(status IN ('ok','changed','error','skipped')),
+    changes_detected  INTEGER NOT NULL DEFAULT 0,
+    error_msg         TEXT NULL,
+    created_at        TEXT NOT NULL
+);
+
+CREATE TABLE knowledge_refresh_runs (
+    run_id              TEXT PRIMARY KEY,
+    triggered_by        TEXT NOT NULL CHECK(triggered_by IN ('scheduled','manual','webhook')),
+    sources_checked     INTEGER NOT NULL DEFAULT 0,
+    sources_changed     INTEGER NOT NULL DEFAULT 0,
+    claims_reverified   INTEGER NOT NULL DEFAULT 0,
+    claims_upgraded     INTEGER NOT NULL DEFAULT 0,
+    claims_downgraded   INTEGER NOT NULL DEFAULT 0,
+    notifications_created INTEGER NOT NULL DEFAULT 0,
+    started_at          TEXT NOT NULL,
+    completed_at        TEXT NULL,
+    status              TEXT NOT NULL CHECK(status IN ('running','completed','failed')),
+    error_msg           TEXT NULL
+);
+
+CREATE TABLE knowledge_notifications (
+    notification_id TEXT PRIMARY KEY,
+    refresh_run_id  TEXT NULL REFERENCES knowledge_refresh_runs(run_id) ON DELETE SET NULL,
+    source_type     TEXT NOT NULL CHECK(source_type IN ('textbook','pubmed','web','course_pdf')),
+    source_id       TEXT NOT NULL,
+    change_summary  TEXT NOT NULL DEFAULT '',
+    affected_claims INTEGER NOT NULL DEFAULT 0,
+    severity        TEXT NOT NULL CHECK(severity IN ('info','warning','critical')),
+    acknowledged    INTEGER NOT NULL DEFAULT 0 CHECK(acknowledged IN (0,1)),
+    acknowledged_at TEXT NULL,
+    created_at      TEXT NOT NULL
+);
+```
+
+Applied by `core/database/migrate_v14.py::ensure_refresh_v14()` (chains
+V9→…→V14, verified backup at `backups/medforge_pre_v14_backup_*.db`).
+Rollback: drop the three tables. See `docs/KNOWLEDGE_REFRESH.md`.

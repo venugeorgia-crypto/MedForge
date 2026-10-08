@@ -151,6 +151,7 @@ def main() -> None:
               "study-intel ... | product-intel ... | "
               "publication run-gates|approve|publish|retire|state|queue|reviews|resolve|export | "
               "video render|state|probe | "
+              "refresh check|status|notifications|ack|reverify | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -823,6 +824,46 @@ def main() -> None:
         else:
             raise SystemExit(
                 "Usage: medforge_core video render|state|probe"
+            )
+    elif cmd == "refresh":
+        # P13 knowledge refresh (source updates + claim re-verification):
+        # refresh check [sources][|pubmed_query|web_url] | refresh status |
+        # refresh notifications [unread|all] | refresh ack <notification_id> |
+        # refresh reverify <document_id>
+        from medforge import knowledge_refresh as KR
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else "status"
+        if action == "check":
+            sources = [s.strip() for s in parts[1].split(",") if s.strip()] \
+                if len(parts) > 1 and parts[1] else None
+            pubmed_queries = [parts[2]] if len(parts) > 2 and parts[2] else None
+            web_urls = [parts[3]] if len(parts) > 3 and parts[3] else None
+            print(json.dumps(KR.run_refresh(
+                triggered_by="manual", sources=sources,
+                pubmed_queries=pubmed_queries, web_urls=web_urls,
+            ), indent=2, default=str))
+        elif action == "status":
+            print(json.dumps(KR.get_refresh_status(), indent=2, default=str))
+        elif action == "notifications":
+            which = (parts[1].lower() if len(parts) > 1 and parts[1] else "unread")
+            acknowledged = None if which == "all" else (0 if which == "unread" else int(which))
+            print(json.dumps(KR.list_notifications(acknowledged=acknowledged), indent=2, default=str))
+        elif action == "ack":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core refresh ack <notification_id>")
+            print(json.dumps(KR.acknowledge_notification(parts[1]), indent=2, default=str))
+        elif action == "reverify":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core refresh reverify <document_id>")
+            print(json.dumps(KR.reverify_claims_for_document(parts[1]), indent=2, default=str))
+        else:
+            raise SystemExit(
+                "Usage: medforge_core refresh check|status|notifications|ack|reverify"
             )
     elif cmd == "migrate":
         with job_lock():

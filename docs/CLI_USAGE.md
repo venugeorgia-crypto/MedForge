@@ -687,19 +687,49 @@ See `docs/VIDEO.md`.
 
 ---
 
+### `medforge refresh "<action>|<args...>"` — Knowledge Refresh (P13)
+
+```bash
+medforge refresh check textbook
+medforge refresh check textbook,pubmed|growth hormone
+medforge refresh check web||https://www.nice.org.uk/guidance/ng1
+medforge refresh status
+medforge refresh notifications unread
+medforge refresh ack <notification_id>
+medforge refresh reverify <document_id>
+```
+
+| Action | What it does |
+| --- | --- |
+| `check <sources>[\|pubmed_query\|web_url]` | One refresh run: detect changed textbooks (file hash → new P3 edition + chunk diff), new PubMed PMIDs, changed web pages; re-verify affected claims through P4; record the run + notifications. |
+| `status` | Last run, per-source latest check, open-notification count. |
+| `notifications [unread\|all]` | Refresh notifications awaiting acknowledgement. |
+| `ack <notification_id>` | Acknowledge one notification. |
+| `reverify <document_id>` | Re-verify the claims whose evidence came from this document against its latest edition. |
+
+Offline mode (`MEDFORGE_OFFLINE=1`) skips PubMed/web checks and still checks local
+textbooks. See `docs/KNOWLEDGE_REFRESH.md`.
+
+---
+
 ### `medforge migrate` — Run V3 Migration
 
 Explicitly run the V3 database migration (normally auto-run on first use).
-V4–V10 migrations (curriculum, textbook provenance, evidence graph,
+V4–V14 migrations (curriculum, textbook provenance, evidence graph,
 recency-weighted learner model, interactive tutor, assessment engine,
-study intelligence / product factory) run automatically on first use of their
-feature, or explicitly via their runners:
+study intelligence / product factory, publication, video, provider router,
+knowledge refresh) run automatically on first use of their feature, or
+explicitly via their runners:
 
 ```bash
 medforge migrate
 .venv-v2.1/bin/python -m core.database.migrate_v8 --db database/medforge.sqlite3
 .venv-v2.1/bin/python -m core.database.migrate_v9 --db database/medforge.sqlite3
 .venv-v2.1/bin/python -m core.database.migrate_v10 --db database/medforge.sqlite3
+.venv-v2.1/bin/python -m core.database.migrate_v11 --db database/medforge.sqlite3
+.venv-v2.1/bin/python -m core.database.migrate_v12 --db database/medforge.sqlite3
+.venv-v2.1/bin/python -m core.database.migrate_v13 --db database/medforge.sqlite3
+.venv-v2.1/bin/python -m core.database.migrate_v14 --db database/medforge.sqlite3
 ```
 
 Every runner verifies `integrity_check` and `foreign_key_check` before
