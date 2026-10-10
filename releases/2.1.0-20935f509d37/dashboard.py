@@ -47,7 +47,7 @@ def show_pack(out, key):
                 z.write(f, f.name)
     st.download_button("Download complete pack",data.getvalue(),file_name=out.parent.name+"-"+out.name+".zip",mime="application/zip",key=key)
 
-tabs=st.tabs(["PRODUCT","STUDY","REVIEW","LEARNER","TUTOR","ASSESSMENTS","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","LIBRARY","HISTORY","STATUS"])
+tabs=st.tabs(["PRODUCT","STUDY","REVIEW","LEARNER","TUTOR","ASSESSMENTS","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","LIBRARY","HISTORY","STATUS","EVALUATION"])
 with tabs[0]:
     topic=st.text_input("What do you want to learn?",placeholder="cardiac cycle",max_chars=250)
     st.caption("PDFs + PubMed + authoritative web pages → study guide, workbook, cards, quiz and scripts.")
@@ -670,6 +670,44 @@ with tabs[12]:
         a.metric("Evidence passages",s["chunks"]); b.metric("PDFs",s["pdfs"]); c.metric("Pack versions",s["products"])
         st.write("Ollama: "+("running" if s["ollama"] else "will start when needed"))
         st.write("Installed models: "+(", ".join(s["models"]) or "downloaded automatically when needed"))
+    except Exception as e: show_error(e)
+with tabs[13]:
+    # P16 MEDICAL-QA EVALUATION: deterministic golden-set cases over the real
+    # P4/P9 engines in a sandbox home; runs persist and are compared to the
+    # previous run so regressions surface instead of hiding.
+    from medforge import evaluation as EV
+    st.subheader("Medical-QA evaluation")
+    st.caption("Golden-set cases exercise the real evidence verifier and canonical renderer. Cases run sandboxed (nothing written to your data, no model calls), results are stored, and a case that passed before but fails now is reported as a regression.")
+    try:
+        status=EV.evaluation_status()
+        latest=status.get("latest") or {}
+        a,b,c=st.columns(3)
+        a.metric("Stored runs",status["runs"])
+        b.metric("Last status",(latest.get("status") or "—").upper())
+        c.metric("Last pass rate",latest.get("pass_rate") if latest else "—")
+        if latest.get("metrics"):
+            st.caption("Metrics: "+" · ".join(f"{k}: {v}" for k,v in sorted(latest["metrics"].items()) if not k.endswith("_cases")))
+        if latest.get("threshold_failures"):
+            st.warning("Threshold failures: "+"; ".join(latest["threshold_failures"]))
+        if st.button("Run the builtin golden set",key="p16_run"):
+            with st.spinner("Running sandboxed evaluation (no model calls)..."):
+                try: st.session_state["p16_report"]=EV.run_evaluation(triggered_by="manual")
+                except Exception as e: show_error(e)
+        rep=st.session_state.get("p16_report")
+        if rep:
+            st.success(f"{rep['cases_passed']}/{rep['cases_total']} passed · status {rep['status'].upper()} · digest {rep['golden_digest']}"+(f" · regressions {len(rep['regressions'])}" if rep.get("regressions") else ""))
+            for case in rep["cases"]:
+                line=f"{case['status'].upper()} · {case['case_id']} · {case['kind']}"
+                if case["failures"]: line+=" · "+"; ".join(case["failures"])
+                st.caption(line)
+        runs=EV.list_evaluation_runs(limit=10)
+        if runs:
+            with st.expander(f"Recent runs ({len(runs)})"):
+                for run in runs:
+                    st.caption(f"{run['created_at']} · {run['suite']} · {run['status']} · pass {run['pass_rate']} · failed {run['cases_failed']} · regressions {run.get('regressions',0)} · {run['run_id']}")
+        snap=EV.snapshot_metrics()
+        with st.expander("Live-home snapshot (read-only)"):
+            st.json({"claims":snap["claims"],"content":snap["content"]})
     except Exception as e: show_error(e)
 st.divider()
 st.caption("Educational drafts. Citation labels are traceability aids; review source passages before sharing medical claims.")

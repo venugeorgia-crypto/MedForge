@@ -1105,6 +1105,52 @@ CREATE INDEX IF NOT EXISTS idx_automation_runs_job ON automation_runs(job_id, st
 
 V15_TABLES = ("automation_jobs", "automation_runs")
 
+# V16 evaluation enums
+EVALUATION_RUN_STATUSES = ("passed", "failed")
+EVALUATION_CASE_STATUSES = ("passed", "failed", "skipped")
+EVALUATION_TRIGGERS = ("manual", "cli", "automation")
+
+V16_SCHEMA_DDL = """
+-- 1. Evaluation runs (one row per golden-set run; aggregate metrics as JSON)
+CREATE TABLE IF NOT EXISTS evaluation_runs (
+    run_id TEXT PRIMARY KEY,
+    suite TEXT NOT NULL DEFAULT 'default',
+    golden_digest TEXT NOT NULL DEFAULT '',
+    cases_total INTEGER NOT NULL DEFAULT 0,
+    cases_passed INTEGER NOT NULL DEFAULT 0,
+    cases_failed INTEGER NOT NULL DEFAULT 0,
+    cases_skipped INTEGER NOT NULL DEFAULT 0,
+    pass_rate REAL NOT NULL DEFAULT 0,
+    metrics TEXT NOT NULL DEFAULT '{}',
+    thresholds TEXT NOT NULL DEFAULT '{}',
+    threshold_failures TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL CHECK(status IN ('passed', 'failed')),
+    baseline_run_id TEXT NULL,
+    regressions INTEGER NOT NULL DEFAULT 0,
+    triggered_by TEXT NOT NULL CHECK(triggered_by IN ('manual', 'cli', 'automation')),
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_evaluation_runs_time ON evaluation_runs(created_at);
+CREATE INDEX IF NOT EXISTS idx_evaluation_runs_suite ON evaluation_runs(suite, created_at);
+
+-- 2. Evaluation case results (one row per case per run)
+CREATE TABLE IF NOT EXISTS evaluation_cases (
+    run_id TEXT NOT NULL REFERENCES evaluation_runs(run_id) ON DELETE CASCADE,
+    case_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('passed', 'failed', 'skipped')),
+    severity TEXT NOT NULL DEFAULT 'high',
+    metrics TEXT NOT NULL DEFAULT '{}',
+    failures TEXT NOT NULL DEFAULT '[]',
+    reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (run_id, case_id)
+);
+CREATE INDEX IF NOT EXISTS idx_evaluation_cases_case ON evaluation_cases(case_id, run_id);
+"""
+
+V16_TABLES = ("evaluation_runs", "evaluation_cases")
+
 # V3 Schema DDL statements
 V3_SCHEMA_DDL = """
 -- Migration tracking table

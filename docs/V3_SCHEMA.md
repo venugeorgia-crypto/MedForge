@@ -679,3 +679,53 @@ CREATE TABLE automation_runs (
 Applied by `core/database/migrate_v15.py::ensure_automation_v15()` (chains
 V9→…→V15, verified backup at `backups/medforge_pre_v15_backup_*.db`).
 Rollback: drop the two tables. See `docs/AUTOMATION.md`.
+
+### Migration 16.0.0 (P16 — Medical-QA evaluation)
+
+Two tables hold the golden-set evaluator's history. Aggregate metrics,
+thresholds and per-case details are JSON text so new metrics can be added
+without a schema change.
+
+```sql
+CREATE TABLE IF NOT EXISTS evaluation_runs (
+    run_id             TEXT PRIMARY KEY,
+    suite              TEXT NOT NULL DEFAULT 'default',
+    golden_digest      TEXT NOT NULL DEFAULT '',
+    cases_total        INTEGER NOT NULL DEFAULT 0,
+    cases_passed       INTEGER NOT NULL DEFAULT 0,
+    cases_failed       INTEGER NOT NULL DEFAULT 0,
+    cases_skipped      INTEGER NOT NULL DEFAULT 0,
+    pass_rate          REAL NOT NULL DEFAULT 0,
+    metrics            TEXT NOT NULL DEFAULT '{}',
+    thresholds         TEXT NOT NULL DEFAULT '{}',
+    threshold_failures TEXT NOT NULL DEFAULT '[]',
+    status             TEXT NOT NULL CHECK(status IN ('passed', 'failed')),
+    baseline_run_id    TEXT NULL,
+    regressions        INTEGER NOT NULL DEFAULT 0,
+    triggered_by       TEXT NOT NULL CHECK(triggered_by IN ('manual', 'cli', 'automation')),
+    created_at         TEXT NOT NULL
+);
+CREATE INDEX idx_evaluation_runs_time  ON evaluation_runs(created_at);
+CREATE INDEX idx_evaluation_runs_suite ON evaluation_runs(suite, created_at);
+
+CREATE TABLE IF NOT EXISTS evaluation_cases (
+    run_id     TEXT NOT NULL REFERENCES evaluation_runs(run_id) ON DELETE CASCADE,
+    case_id    TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    status     TEXT NOT NULL CHECK(status IN ('passed', 'failed', 'skipped')),
+    severity   TEXT NOT NULL DEFAULT 'high',
+    metrics    TEXT NOT NULL DEFAULT '{}',
+    failures   TEXT NOT NULL DEFAULT '[]',
+    reason     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (run_id, case_id)
+);
+CREATE INDEX idx_evaluation_cases_case ON evaluation_cases(case_id, run_id);
+```
+
+Applied by `core/database/migrate_v16.py::ensure_evaluation_v16()` (chains
+V9→…→V16, verified backup at `backups/medforge_pre_v16_backup_*.db`), reached
+automatically when `medforge evaluate` first runs.
+Rollback: drop `evaluation_cases` then `evaluation_runs`. Case fixtures run in a
+throwaway sandbox home, so these rows describe evaluations only — never learner
+claims or content. See `docs/P16_MATRIX.md`.

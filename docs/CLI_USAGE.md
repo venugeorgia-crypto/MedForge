@@ -768,14 +768,47 @@ the hardening inventory.
 
 ---
 
+### `medforge evaluate "[action|args...]"` — Medical-QA evaluation (P16)
+
+```bash
+medforge evaluate                            # run the builtin golden set
+medforge evaluate run <golden.json>          # run your own golden set
+medforge evaluate status                     # thresholds, run count, latest run
+medforge evaluate list [n]                   # recent runs (default 20)
+medforge evaluate show <run_id>              # one run incl. per-case rows
+medforge evaluate compare <run_id>           # diff vs. previous run
+medforge evaluate compare <run_id>|<baseline># diff against an explicit run
+medforge evaluate snapshot                   # read-only live-home metrics
+medforge evaluate sample [path]              # export the builtin suite to edit
+```
+
+| Action | What it does |
+| --- | --- |
+| `run [file]` | Executes the golden-set cases against the real P4 evidence verifier and P9 canonical renderer **inside a throwaway sandbox home**, persists the run, and compares it with the previous run of the same suite. Exits `1` when the status is not `passed` (a failed case, a violated threshold, or a regression). |
+| `status` | Evaluation version, configured thresholds, stored-run count and the latest run summary. |
+| `list [n]` | Recent runs, newest first. |
+| `show <run_id>` | One run with its per-case results; unknown ids exit `1`. |
+| `compare <run_id>[\|baseline]` | Case-level diff against the previous run (or an explicit baseline): regressions, fixes, added/removed cases, metric and pass-rate deltas. |
+| `snapshot` | Read-only measurement of the **live** home (claims by status, grounding, canonical content/artifact integrity). Never writes. |
+| `sample [path]` | Writes the builtin 7-case suite as JSON so you can extend it. Cases are data — parsed and validated, never executed. |
+
+Case kinds: `claim_status` (P4 aggregation driven by explicit stub verdicts),
+`abstention` (no candidates → `INSUFFICIENT_EVIDENCE`, zero model calls,
+`deterministic-gate`), `canonical` (P9 deterministic fallback, every fact cited)
+and `product` (rendered artifacts match their checksums and cite only known
+labels). No case calls a model. See `docs/P16_MATRIX.md` for metrics,
+regression semantics and limitations.
+
+---
+
 ### `medforge migrate` — Run V3 Migration
 
 Explicitly run the V3 database migration (normally auto-run on first use).
-V4–V15 migrations (curriculum, textbook provenance, evidence graph,
+V4–V16 migrations (curriculum, textbook provenance, evidence graph,
 recency-weighted learner model, interactive tutor, assessment engine,
 study intelligence / product factory, publication, video, provider router,
-knowledge refresh, automation) run automatically on first use of their feature,
-or explicitly via their runners:
+knowledge refresh, automation, evaluation) run automatically on first use of
+their feature, or explicitly via their runners:
 
 ```bash
 medforge migrate
@@ -787,10 +820,12 @@ medforge migrate
 .venv-v2.1/bin/python -m core.database.migrate_v13 --db database/medforge.sqlite3
 .venv-v2.1/bin/python -m core.database.migrate_v14 --db database/medforge.sqlite3
 .venv-v2.1/bin/python -m core.database.migrate_v15 --db database/medforge.sqlite3
+.venv-v2.1/bin/python -m core.database.migrate_v16 --db database/medforge.sqlite3
 ```
 
-P15 adds **no** migration: hardening changed behaviour only, so the schema stays
-at `15.0.0`.
+P15 adds **no** migration: hardening changed behaviour only. V16 adds the two
+evaluation tables (`evaluation_runs`, `evaluation_cases`), so the current schema
+is `16.0.0`.
 
 Every runner verifies `integrity_check` and `foreign_key_check` before
 reporting success, and takes a verified snapshot into `backups/` unless

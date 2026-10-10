@@ -25,6 +25,7 @@ from medforge import doctor as D
 
 from core.database.schema import LEGACY_SCHEMA_DDL, V3_SCHEMA_DDL
 from core.database.migrate_v15 import ensure_automation_v15
+from core.database.migrate_v16 import ensure_evaluation_v16
 
 
 @pytest.fixture()
@@ -84,6 +85,7 @@ class TestDiagnose:
         base, db = doc_env
         _seed_legacy(db)
         ensure_automation_v15(db, create_backup=False)
+        ensure_evaluation_v16(db, create_backup=False)
         _snapshot(db, base / "backups" / "medforge_nightly_20260101.db")
 
         report = D.diagnose()
@@ -103,7 +105,9 @@ class TestDiagnose:
     def test_detects_pending_migrations(self, doc_env):
         _base, db = doc_env
         _seed_legacy(db)
-        assert "15.0.0" in D.pending_migrations()
+        pending = D.pending_migrations()
+        assert "15.0.0" in pending
+        assert "16.0.0" in pending
         report = D.diagnose()
         assert not report["healthy"]
         assert any("pending migrations" in p for p in report["problems"])

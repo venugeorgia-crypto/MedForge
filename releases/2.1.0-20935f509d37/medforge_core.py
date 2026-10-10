@@ -154,6 +154,7 @@ def main() -> None:
               "refresh check|status|notifications|ack|reverify | "
               "nightly [run|dry-run|only|runs|status] | schedule install|status|uninstall | "
               "diagnose [full|verify-backup|restore|repair] | "
+              "evaluate run|status|list|show|compare|snapshot|sample | "
               "migrate | doctor")
         return
     cmd = sys.argv[1].lower()
@@ -821,7 +822,9 @@ def main() -> None:
         elif action == "probe":
             if len(parts) < 2:
                 raise SystemExit("Usage: medforge_core video probe <video_path>")
-            from pathlib import Path
+            # NOTE: keep using the module-level `Path`; a local re-import here
+            # makes `Path` function-local for all of main(), which silently
+            # broke every earlier branch that touches Path (evaluate sample).
             print(json.dumps(VID.probe_video(Path(parts[1])), indent=2))
         else:
             raise SystemExit(
@@ -954,6 +957,54 @@ def main() -> None:
         else:
             raise SystemExit(
                 "Usage: medforge_core diagnose [full]|verify-backup|restore|repair"
+            )
+    elif cmd == "evaluate":
+        # P16 golden-set evaluation:
+        # evaluate [run [file]] | evaluate status | evaluate list [n] |
+        # evaluate show <run_id> | evaluate compare <run_id>[|<baseline>] |
+        # evaluate snapshot | evaluate sample [path]
+        from medforge import evaluation as EVAL
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else "run"
+        if action in ("", "run"):
+            case_file = Path(parts[1]).expanduser() if len(parts) > 1 and parts[1] else None
+            report = EVAL.run_evaluation(case_file=case_file, triggered_by="cli")
+            print(json.dumps(report, indent=2, default=str))
+            if report.get("status") != "passed":
+                sys.exit(1)
+        elif action == "status":
+            print(json.dumps(EVAL.evaluation_status(), indent=2, default=str))
+        elif action == "list":
+            limit = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 20
+            print(json.dumps(EVAL.list_evaluation_runs(limit=limit),
+                             indent=2, default=str))
+        elif action == "show":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core evaluate show <run_id>")
+            run = EVAL.get_evaluation_run(parts[1])
+            if run is None:
+                raise SystemExit(f"Unknown evaluation run: {parts[1]}")
+            print(json.dumps(run, indent=2, default=str))
+        elif action == "compare":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core evaluate compare <run_id>[|<baseline>]")
+            baseline = parts[2] if len(parts) > 2 and parts[2] else None
+            print(json.dumps(EVAL.compare_evaluations(parts[1], baseline),
+                             indent=2, default=str))
+        elif action == "snapshot":
+            print(json.dumps(EVAL.snapshot_metrics(), indent=2, default=str))
+        elif action == "sample":
+            target = (Path(parts[1]).expanduser() if len(parts) > 1 and parts[1]
+                      else _types.BASE / "evaluation" / "golden_sample.json")
+            print(EVAL.write_sample_golden_set(target))
+        else:
+            raise SystemExit(
+                "Usage: medforge_core evaluate run|status|list|show|compare|snapshot|sample"
             )
     elif cmd == "migrate":
         with job_lock():
