@@ -44,6 +44,20 @@ Local-first; citation label ≠ proof; no claim done unless tested + full suite 
 2. ~~Rebuild installer~~ DONE 2026-10-13 (see above). Signing/notarization + feed deployment remain.
 3. Remaining: run FULL suite; update AGENTS.md current-state block + `docs/P8_MATRIX.md` appendix + `docs/CLI_USAGE.md` (psychometrics); `git status/diff` review, commit, push.
 
+## Cleanup + manual + zip (2026-10-13, ~01:45 UTC)
+- Removed junk from folder: empty `app/` stub dir, all `.DS_Store` (incl. venv),
+  all `__pycache__` outside venv, `.pytest_cache` (root + release), stale 0-byte
+  locks (`.dashboard.lock`, `.install.lock`, `.job.lock`, `.installer-ne7mimsg`).
+  Kept live runtime data: `database/`, `backups/`, `logs/`, `products/`,
+  `.venv-v2.1`, `.freebuff`, `current` symlink, runtime JSONs. No tracked file
+  touched by cleanup (`git status` clean except intended binaries).
+- Wrote `USER_MANUAL.md` (v2.1.0 user manual, grounded in README/CLI/dashboard).
+- Built `/Users/venuchowdary/MedForge-2.1.0-clean.zip` = `git archive HEAD`
+  (5a9e3cc, pristine tracked tree) + `USER_MANUAL.md` + updated
+  `SESSION_MEMORY.md`. Excluded: `.git`, `.venv`, database/backups/logs/tmp/
+  products runtime, caches, OS noise, `.pkg`/`.dmg`/`.app` binaries.
+- `USER_MANUAL.md` left uncommitted in folder (commit on request).
+
 ## Key paths (additions this session)
 - `tests/test_psychometrics.py` (new, 10 tests)
 - `tools/medforge_distribution.xml` (new, reproducible productbuild input)
