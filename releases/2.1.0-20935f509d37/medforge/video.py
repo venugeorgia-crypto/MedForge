@@ -39,6 +39,157 @@ ASPECT_SPECS: Dict[str, Tuple[int, int]] = {
     "1:1": (1080, 1080),
 }
 
+ASPECT_SPECS: Dict[str, Tuple[int, int]] = {
+    "16:9": (1920, 1080),
+    "9:16": (1080, 1920),
+    "1:1": (1080, 1080),
+}
+
+# ─── Anatomical Diagram Templates ───
+# SVG-based anatomical diagrams for medical topics
+# These are generated programmatically and can be rendered via Pillow/cairosvg
+
+ANATOMICAL_DIAGRAMS = {
+    "cardiac_cycle": {
+        "heart_chambers": {
+            "svg": """<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+  <!-- Heart Chambers Diagram -->
+  <rect x="50" y="50" width="300" height="200" fill="#1E293B" stroke="#334155" stroke-width="2" rx="20"/>
+  <!-- Right Atrium -->
+  <ellipse cx="150" cy="100" rx="60" ry="40" fill="#EF4444" opacity="0.7" stroke="#DC2626" stroke-width="2"/>
+  <text x="150" y="105" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Right Atrium</text>
+  <!-- Right Ventricle -->
+  <ellipse cx="150" cy="180" rx="60" ry="50" fill="#F87171" opacity="0.7" stroke="#EF4444" stroke-width="2"/>
+  <text x="150" y="185" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Right Ventricle</text>
+  <!-- Left Atrium -->
+  <ellipse cx="250" cy="100" rx="60" ry="40" fill="#3B82F6" opacity="0.7" stroke="#2563EB" stroke-width="2"/>
+  <text x="250" y="105" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Left Atrium</text>
+  <!-- Left Ventricle -->
+  <ellipse cx="250" cy="180" rx="60" ry="50" fill="#60A5FA" opacity="0.7" stroke="#3B82F6" stroke-width="2"/>
+  <text x="250" y="185" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Left Ventricle</text>
+  <!-- Valves -->
+  <path d="M120 140 Q150 120 180 140" stroke="#F59E0B" stroke-width="3" fill="none" stroke-dasharray="5,5"/>
+  <text x="150" y="115" text-anchor="middle" fill="#F59E0B" font-size="10">Tricuspid</text>
+  <path d="M220 140 Q250 120 280 140" stroke="#F59E0B" stroke-width="3" fill="none" stroke-dasharray="5,5"/>
+  <text x="250" y="115" text-anchor="middle" fill="#F59E0B" font-size="10">Mitral</text>
+  <!-- Aortic/Pulmonic valves -->
+  <path d="M250 80 Q280 80 280 120" stroke="#F59E0B" stroke-width="3" fill="none" stroke-dasharray="5,5"/>
+  <text x="290" y="100" text-anchor="middle" fill="#F59E0B" font-size="10">Aortic</text>
+  <path d="M150 80 Q120 80 120 120" stroke="#F59E0B" stroke-width="3" fill="none" stroke-dasharray="5,5"/>
+  <text x="110" y="100" text-anchor="middle" fill="#F59E0B" font-size="10">Pulmonic</text>
+  <!-- Arrows for blood flow -->
+  <path d="M50 150 L80 150 L80 120" stroke="#EF4444" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M350 150 L320 150 L320 120" stroke="#3B82F6" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#EF4444"/>
+    </marker>
+    <marker id="arrowhead-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#3B82F6"/>
+    </marker>
+  </defs>
+</svg>""",
+        }
+    },
+    "pituitary_hormones": {
+        "hypothalamus_pituitary_axis": {
+            "svg": """<svg viewBox="0 0 500 350" xmlns="http://www.w3.org/2000/svg">
+  <!-- HPA Axis Diagram -->
+  <rect x="20" y="20" width="460" height="310" fill="#1E293B" stroke="#334155" stroke-width="2" rx="20"/>
+  <!-- Hypothalamus -->
+  <ellipse cx="250" cy="60" rx="120" ry="40" fill="#8B5CF6" opacity="0.8" stroke="#7C3AED" stroke-width="2"/>
+  <text x="250" y="65" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Hypothalamus</text>
+  <text x="250" y="85" text-anchor="middle" fill="white" font-size="11">GHRH / Somatostatin</text>
+  <!-- Arrows down -->
+  <path d="M250 100 L250 150" stroke="#F59E0B" stroke-width="3" marker-end="url(#arrowhead)"/>
+  <path d="M250 100 L250 150" stroke="#F59E0B" stroke-width="3" marker-end="url(#arrowhead-blue)"/>
+  <!-- Pituitary -->
+  <ellipse cx="250" cy="190" rx="130" ry="50" fill="#EC4899" opacity="0.8" stroke="#DB2777" stroke-width="2"/>
+  <text x="250" y="185" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Anterior Pituitary</text>
+  <text x="250" y="210" text-anchor="middle" fill="white" font-size="11">Somatotrophs → GH</text>
+  <!-- GH arrow down -->
+  <path d="M250 240 L250 300" stroke="#EF4444" stroke-width="3" marker-end="url(#arrowhead)"/>
+  <!-- Liver -->
+  <ellipse cx="250" cy="310" rx="80" ry="30" fill="#22C55E" opacity="0.8" stroke="#16A34A" stroke-width="2"/>
+  <text x="250" y="315" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Liver</text>
+  <text x="250" y="330" text-anchor="middle" fill="white" font-size="11">IGF-1 production</text>
+  <!-- Feedback arrows -->
+  <path d="M150 190 Q100 220 100 310" stroke="#3B82F6" stroke-width="2" fill="none" marker-end="url(#arrowhead-blue)"/>
+  <text x="80" y="250" text-anchor="middle" fill="#3B82F6" font-size="10">IGF-1 feedback</text>
+  <path d="M350 190 Q400 220 400 310" stroke="#3B82F6" stroke-width="2" fill="none" marker-end="url(#arrowhead-blue)"/>
+  <text x="420" y="250" text-anchor="middle" fill="#3B82F6" font-size="10">IGF-1 feedback</text>
+  <!-- GH effects -->
+  <path d="M380 190 L450 190" stroke="#EF4444" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="460" y="185" text-anchor="start" fill="#EF4444" font-size="11">GH → tissues</text>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#EF4444"/>
+    </marker>
+    <marker id="arrowhead-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#3B82F6"/>
+    </marker>
+  </defs>
+</svg>""",
+        }
+    },
+}
+
+# ─── Anatomical Diagram Rendering ───
+
+def _render_svg_to_png(svg_content: str, width: int, height: int, out_path: Path) -> bool:
+    """Render SVG content to PNG using cairosvg if available, fallback to Pillow."""
+    try:
+        import cairosvg
+        cairosvg.svg2png(
+            bytestring=svg_content.encode("utf-8"),
+            write_to=str(out_path),
+            output_width=width,
+            output_height=height
+        )
+        return True
+    except ImportError:
+        pass
+    except Exception:
+        pass
+    
+    # Fallback: try to render with Pillow (limited SVG support)
+    try:
+        # This is a minimal fallback - for full SVG support, cairosvg is recommended
+        from PIL import Image, ImageDraw
+        img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        # Draw a simple placeholder for the diagram
+        draw.rectangle([50, 50, width-50, height-50], outline="#3B82F6", width=3)
+        draw.text((width//2, height//2), "Anatomical Diagram\n(Install cairosvg for SVG rendering)", 
+                  fill="#60A5FA", anchor="mm", font_size=24)
+        img.save(out_path, "PNG")
+        return True
+    except Exception:
+        return False
+
+
+def get_anatomical_diagram(diagram_name: str, variant: str = "default") -> Optional[str]:
+    """Get SVG content for a named anatomical diagram."""
+    diagram_group = ANATOMICAL_DIAGRAMS.get(diagram_name)
+    if not diagram_group:
+        return None
+    return diagram_group.get(variant, {}).get("svg")
+
+
+def render_anatomical_diagram(
+    diagram_name: str,
+    out_path: Path,
+    width: int = 800,
+    height: int = 600,
+    variant: str = "default"
+) -> bool:
+    """Render an anatomical diagram to PNG."""
+    svg = get_anatomical_diagram(diagram_name, variant)
+    if not svg:
+        return False
+    return _render_svg_to_png(svg, width, height, out_path)
+
+
 # Caption target width (characters) and per-scene fact grouping.
 CAPTION_WIDTH = 90
 FACTS_PER_SCENE = 4

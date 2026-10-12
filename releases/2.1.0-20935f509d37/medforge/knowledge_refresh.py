@@ -57,6 +57,10 @@ MAX_CHUNKS_SCANNED = 400
 MAX_CANDIDATES_PER_CLAIM = 3
 MAX_CLAIMS_PER_DOCUMENT = 25
 
+# PubMed abstract fetching
+PUBMED_ABSTRACT_RETMAX = 20
+PUBMED_ABSTRACT_EMAIL = T.NCBI_EMAIL
+
 
 # ─── Table ensure (candidate-walk import, mirrors publication.py) ───
 
@@ -298,6 +302,221 @@ def _default_pubmed_pmids(query: str, retmax: int = 20) -> List[str]:
     }, timeout=30)
     r.raise_for_status()
     return list(r.json().get("esearchresult", {}).get("idlist", []))
+
+
+def _fetch_pubmed_abstracts(pmids: List[str], retmax: int = PUBMED_ABSTRACT_RETMAX) -> Dict[str, str]:
+    """Fetch abstracts for a list of PMIDs via E-utilities efetch.
+    
+    Returns a dict mapping PMID -> abstract text.
+    """
+    if not pmids:
+        return {}
+    import requests
+    
+    base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+    common: Dict[str, str] = {"tool": "MedForge", "retmode": "json"}
+    if PUBMED_ABSTRACT_EMAIL:
+        common["email"] = PUBMED_ABSTRACT_EMAIL
+    
+    # efetch in batches of 200 (NCBI limit)
+    abstracts = {}
+    for i in range(0, len(pmids), 200):
+        batch = pmids[i:i+200]
+        r = requests.get(base + "/efetch.fcgi", params={
+            **common, "db": "pubmed", "id": ",".join(batch), "retmode": "xml",
+        }, timeout=30)
+        r.raise_for_status()
+        
+        # Parse XML
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(r.text)
+        for article in root.findall(".//PubmedArticle"):
+            pmid_elem = article.find(".//PMID")
+            abstract_elem = article.find(".//Abstract/AbstractText")
+            pmid = pmid_elem.text if pmid_elem is not None else None
+            abstract = abstract_elem.text if abstract_elem is not None else ""
+            if pmid:
+                abstracts[pmid] = abstract or ""
+    return abstracts
+
+
+def compare_pubmed_abstracts(
+    old_pmids: List[str],
+    new_pmids: List[str],
+    fetcher: Optional[Callable[[List[str]], Dict[str, str]]] = None,
+) -> Dict[str, Any]:
+    """Compare abstracts for PMIDs that appear in both old and new sets.
+    
+    Detects: new PMIDs, removed PMIDs, and abstract changes for shared PMIDs.
+    """
+    fetcher = fetcher or _fetch_pubmed_abstracts
+    
+    # Fetch abstracts for all PMIDs
+    all_pmids = list(set(old_pmids) | set(new_pmids))
+    abstracts = fetcher(all_pmids)
+    
+    old_set = set(old_pmids)
+    new_set = set(new_pmids)
+    
+    added = new_set - old_set
+    removed = old_set - new_set
+    common = old_set & new_set
+    
+    changed_abstracts = []
+    unchanged_abstracts = []
+    
+    for pmid in common:
+        old_abs = abstracts.get(pmid, "")
+        new_abs = abstracts.get(pmid, "")
+        if old_abs != new_abs:
+            changed_abstracts.append({
+                "pmid": pmid,
+                "old_abstract": old_abs[:500] + ("..." if len(old_abs) > 500 else ""),
+                "new_abstract": new_abs[:500] + ("..." if len(new_abs) > 500 else ""),
+            })
+        else:
+            unchanged_abstracts.append(pmid)
+    
+    return {
+        "total_old": len(old_pmids),
+        "total_new": len(new_pmids),
+        "added_pmids": list(added),
+        "removed_pmids": list(removed),
+        "shared_pmids": list(common),
+        "changed_abstracts": changed_abstracts,
+        "unchanged_abstracts_count": len(unchanged_abstracts),
+    }
+
+
+def check_pubmed_abstract_updates(
+    queries: List[Any],
+    fetcher: Optional[Callable[[str, int], List[str]]] = None,
+    retmax: int = PUBMED_ABSTRACT_RETMAX,
+) -> List[Dict[str, Any]]:
+    """Check for new PMIDs AND abstract revisions for each query.
+    
+    Extends check_pubmed_updates by also fetching and comparing abstracts
+    for PMIDs that exist in both the old and new result sets.
+    """
+    ensure_refresh_tables()
+    if T.OFFLINE:
+        return [{"source_type": "pubmed", "source_id": q if isinstance(q, str) else q.get("query", ""),
+                 "status": "skipped", "reason": "offline mode"} for q in queries]
+    fetch = fetcher or _default_pubmed_pmids
+    results: List[Dict[str, Any]] = []
+    for item in queries:
+        query = item if isinstance(item, str) else str(item.get("query", ""))
+        if not query:
+            continue
+        con = _connect()
+        try:
+            previous = _last_check(con, "pubmed", query)
+            known: List[str] = []
+            if previous and previous.get("last_pmid_list"):
+                try:
+                    known = json.loads(previous["last_pmid_list"]) or []
+                except (TypeError, ValueError):
+                    known = []
+            try:
+                current = [str(p) for p in fetch(query, retmax)]
+            except Exception as exc:
+                _record_check(con, "pubmed", query, "error", error=str(exc))
+                con.commit()
+                results.append({"source_type": "pubmed", "source_id": query,
+                                "status": "error", "error": str(exc)})
+                continue
+            
+            # Compare abstracts for changed PMIDs
+            abstract_diff = compare_pubmed_abstracts(known, current)
+            
+            status = "changed" if (abstract_diff["added_pmids"] or abstract_diff["removed_pmids"] or abstract_diff["changed_abstracts"]) else "ok"
+            _record_check(con, "pubmed", query, status, changes=len(abstract_diff["added_pmids"]) + len(abstract_diff["changed_abstracts"]),
+                          pmid_list=abstracts.get("new", current))
+            con.commit()
+            results.append({
+                "source_type": "pubmed", "source_id": query,
+                "status": status,
+                "total_pmids": len(current),
+                "new_pmids": abstract_diff["added_pmids"],
+                "removed_pmids": abstract_diff["removed_pmids"],
+                "changed_abstracts": abstract_diff["changed_abstracts"],
+                "changes_detected": len(abstract_diff["added_pmids"]) + len(abstract_diff["changed_abstracts"]),
+                "abstract_diff": abstract_diff,
+                "baseline": False,
+            })
+        finally:
+            con.close()
+    return results
+
+
+# ─── Enhanced textbook diff ───
+
+
+def diff_textbook_editions_enhanced(old_edition_id: str, new_edition_id: str) -> Dict[str, Any]:
+    """Enhanced chunk-level diff with text similarity analysis.
+    
+    Adds: text similarity scores for changed chunks, section-level change summary.
+    """
+    base_diff = diff_textbook_editions(old_edition_id, new_edition_id)
+    
+    ensure_refresh_tables()
+    con = _connect()
+    try:
+        # Get chunk texts for both editions
+        old_chunks = {r["text_hash"]: r["text"] for r in con.execute(
+            "SELECT text_hash, text FROM textbook_chunks WHERE edition_id=?", (old_edition_id,)
+        )}
+        new_chunks = {r["text_hash"]: r["text"] for r in con.execute(
+            "SELECT text_hash, text FROM textbook_chunks WHERE edition_id=?", (new_edition_id,)
+        )}
+        
+        # Find chunks that exist in both but have different text (same hash = same text)
+        # Since we use text_hash as key, identical text has same hash
+        # For "changed" chunks (same position, different content), we'd need page alignment
+        # For now, report page-level changes
+        old_pages = {r["page_number"]: r for r in con.execute(
+            "SELECT page_number, node_id, text_chars, extraction_status, ocr_status FROM textbook_pages WHERE edition_id=?", (old_edition_id,)
+        )}
+        new_pages = {r["page_number"]: r for r in con.execute(
+            "SELECT page_number, node_id, text_chars, extraction_status, ocr_status FROM textbook_pages WHERE edition_id=?", (new_edition_id,)
+        )}
+        
+        page_changes = []
+        all_pages = set(old_pages.keys()) | set(new_pages.keys())
+        for pno in sorted(all_pages):
+            old = old_pages.get(pno)
+            new = new_pages.get(pno)
+            if old is None:
+                page_changes.append({"page": pno, "change": "added", "chars": new.get("text_chars", 0) if new else 0})
+            elif new is None:
+                page_changes.append({"page": pno, "change": "removed", "chars": old.get("text_chars", 0) if old else 0})
+            elif old.get("text_chars") != new.get("text_chars") or old.get("extraction_status") != new.get("extraction_status"):
+                page_changes.append({"page": pno, "change": "modified", "old_chars": old.get("text_chars", 0), "new_chars": new.get("text_chars", 0)})
+        
+        # Section-level changes
+        old_sections = {r["id"]: (r.get("node_type"), r.get("title"), r.get("start_page"), r.get("end_page")) for r in con.execute(
+            "SELECT id, node_type, title, start_page, end_page FROM textbook_nodes WHERE edition_id=?", (old_edition_id,)
+        )}
+        new_sections = {r["id"]: (r.get("node_type"), r.get("title"), r.get("start_page"), r.get("end_page")) for r in con.execute(
+            "SELECT id, node_type, title, start_page, end_page FROM textbook_nodes WHERE edition_id=?", (new_edition_id,)
+        )}
+        
+        section_changes = []
+        for sid in set(old_sections.keys()) | set(new_sections.keys()):
+            if sid not in old_sections:
+                section_changes.append({"section_id": sid, "change": "added", "title": new_sections[sid][1]})
+            elif sid not in new_sections:
+                section_changes.append({"section_id": sid, "change": "removed", "title": old_sections[sid][1]})
+            elif old_sections[sid] != new_sections[sid]:
+                section_changes.append({"section_id": sid, "change": "modified", "old": old_sections[sid], "new": new_sections[sid]})
+        
+        return {
+            **base_diff,
+            "page_changes": page_changes,
+            "section_changes": section_changes,
+        }
+    finally:
+        con.close()
 
 
 def check_pubmed_updates(

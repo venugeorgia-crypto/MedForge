@@ -294,6 +294,229 @@ def builtin_golden_set() -> List[Dict[str, Any]]:
             "artifact_types": ["study_guide", "flashcards"],
             "expect": {"min_artifacts": 2, "require_consistency": True},
         },
+        # ─── Additional comprehensive golden set cases ───
+        {
+            "id": "claim-unsupported",
+            "kind": "claim_status",
+            "description": "Evidence exists but does not support the claim.",
+            "topic": "mitral stenosis",
+            "claim": "Mitral stenosis causes a diastolic murmur at the apex with radiation to the axilla.",
+            "evidence": [{
+                "id": "eval-ms-1", "label": "S1", "kind": "textbook",
+                "text": "Mitral stenosis produces a diastolic rumbling murmur at the apex, "
+                         "but radiation to the axilla is characteristic of mitral regurgitation, "
+                         "not stenosis.",
+            }],
+            "stub_verdict": {"relationship": "UNSUPPORTED", "confidence": 0.85,
+                             "reason": "evidence states radiation is for regurgitation, not stenosis"},
+            "expect": {"status": "UNSUPPORTED", "min_relationships": 1},
+        },
+        {
+            "id": "claim-multiple-evidence-mixed",
+            "kind": "claim_status",
+            "description": "Multiple evidence items with mixed support levels aggregate correctly.",
+            "topic": "heart failure",
+            "claim": "Beta-blockers reduce mortality in all heart failure patients regardless of EF.",
+            "evidence": [
+                {"id": "eval-hf-1", "label": "S1", "kind": "textbook",
+                 "text": "Beta-blockers reduce mortality in heart failure with reduced ejection fraction (HFrEF)."},
+                {"id": "eval-hf-2", "label": "S2", "kind": "textbook",
+                 "text": "Beta-blockers have not shown mortality benefit in heart failure with preserved ejection fraction (HFpEF)."},
+            ],
+            "stub_verdict": {"relationship": "CONTRADICTED", "confidence": 0.9,
+                             "reason": "one evidence contradicts the universal claim"},
+            "expect": {"status": "CONTRADICTED", "min_relationships": 2},
+        },
+        {
+            "id": "abstain-insufficient-candidates",
+            "kind": "abstention",
+            "description": "Candidates retrieved but all have zero overlap - abstain.",
+            "topic": "pericarditis",
+            "claim": "Pericarditis causes ST elevation in all leads.",
+            "evidence": [
+                {"id": "eval-pc-1", "label": "S1", "kind": "textbook",
+                 "text": "Pericarditis causes diffuse ST elevation, but typically spares aVR and V1."},
+            ],
+            "stub_verdict": {"relationship": "INSUFFICIENT_EVIDENCE", "confidence": None,
+                             "reason": "overlap tokens present but claim overstates (all leads vs sparing aVR/V1)"},
+            "expect": {"status": "INSUFFICIENT_EVIDENCE", "max_model_calls": 1},
+        },
+        {
+            "id": "abstain-no-verifier",
+            "kind": "abstention",
+            "description": "No model provided - deterministic abstention gate.",
+            "topic": "cardiac cycle",
+            "claim": "The cardiac cycle begins with ventricular filling.",
+            "evidence": [{"id": "eval-cc-1", "label": "S1", "kind": "textbook",
+                          "text": "The cardiac cycle conventionally begins with ventricular filling."}],
+            "expect": {"status": "INSUFFICIENT_EVIDENCE", "max_model_calls": 0,
+                       "require_deterministic_gate": True},
+        },
+        {
+            "id": "canonical-deterministic-fallback",
+            "kind": "canonical",
+            "description": "Deterministic fallback when no model: all facts cited from evidence.",
+            "topic": "cardiac cycle",
+            "sources": [
+                {"id": "eval-canon-1", "label": "S1", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.1",
+                 "text": "The cardiac cycle conventionally begins with ventricular "
+                         "filling, followed by isovolumetric contraction and ejection."},
+                {"id": "eval-canon-2", "label": "S2", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.2",
+                 "text": "Stroke volume is the volume of blood ejected by one "
+                         "ventricle in a single contraction."},
+            ],
+            "expect": {"min_facts": 1, "expected_mode": "deterministic_fallback"},
+        },
+        {
+            "id": "canonical-with-model",
+            "kind": "canonical",
+            "description": "Model-assisted canonical content with inline citations.",
+            "topic": "cardiac cycle",
+            "sources": [
+                {"id": "eval-canon-3", "label": "S1", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.1",
+                 "text": "The cardiac cycle conventionally begins with ventricular "
+                         "filling, followed by isovolumetric contraction and ejection."},
+                {"id": "eval-canon-4", "label": "S2", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.2",
+                 "text": "Stroke volume is the volume of blood ejected by one "
+                         "ventricle in a single contraction."},
+            ],
+            "expect": {"min_facts": 1},
+        },
+        
+        {
+            "id": "product-multiple-artifacts",
+            "kind": "product",
+            "description": "Multiple artifact types render correctly with checksums.",
+            "topic": "cardiac cycle",
+            "sources": [
+                {"id": "eval-canon-5", "label": "S1", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.1",
+                 "text": "The cardiac cycle conventionally begins with ventricular "
+                         "filling, followed by isovolumetric contraction and ejection."},
+                {"id": "eval-canon-6", "label": "S2", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.2",
+                 "text": "Stroke volume is the volume of blood ejected by one "
+                         "ventricle in a single contraction."},
+            ],
+            "artifact_types": ["study_guide", "flashcards", "quiz", "mind_map", "cheat_sheet"],
+            "expect": {"min_artifacts": 5, "require_consistency": True},
+        },
+        {
+            "id": "product-checksum-integrity",
+            "kind": "product",
+            "description": "Artifacts regenerate with same checksum when inputs unchanged.",
+            "topic": "cardiac cycle",
+            "sources": [
+                {"id": "eval-canon-7", "label": "S1", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.1",
+                 "text": "The cardiac cycle conventionally begins with ventricular "
+                         "filling, followed by isovolumetric contraction and ejection."},
+            ],
+            "artifact_types": ["study_guide"],
+            "expect": {"min_artifacts": 1, "require_consistency": True, "require_checksum_stability": True},
+        },
+        {
+            "id": "claim-high-risk-dose",
+            "kind": "claim_status",
+            "description": "High-risk dose claim flagged for review.",
+            "topic": "anticoagulation",
+            "claim": "Warfarin dose 5mg daily for atrial fibrillation.",
+            "evidence": [{
+                "id": "eval-wf-1", "label": "S1", "kind": "guideline",
+                "text": "Warfarin dosing for atrial fibrillation is individualized based on INR "
+                         "target 2.0-3.0. Typical maintenance dose ranges from 2-10 mg daily.",
+            }],
+            "stub_verdict": {"relationship": "PARTIALLY_SUPPORTED", "confidence": 0.75,
+                             "reason": "5mg is within typical range but not universally correct; requires INR monitoring"},
+            "expect": {"status": "PARTIALLY_SUPPORTED", "min_relationships": 1},
+        },
+        {
+            "id": "claim-human-reviewed-override",
+            "kind": "claim_status",
+            "description": "Human reviewed claim overrides model verdict.",
+            "topic": "emergency medicine",
+            "claim": "Epinephrine 1mg IV is first-line for cardiac arrest.",
+            "evidence": [{
+                "id": "eval-epi-1", "label": "S1", "kind": "guideline",
+                "text": "Epinephrine 1mg IV/IO every 3-5 minutes during cardiac arrest is "
+                         "recommended by AHA guidelines.",
+            }],
+            "stub_verdict": {"relationship": "SUPPORTED", "confidence": 0.9,
+                             "reason": "AHA guidelines support this dosing"},
+            "expect": {"status": "SUPPORTED", "min_relationships": 1},
+        },
+        {
+            "id": "canonical-multi-topic",
+            "kind": "canonical",
+            "description": "Canonical content with mechanisms, relationships, and clinical correlations.",
+            "topic": "cardiac cycle",
+            "sources": [
+                {"id": "eval-canon-8", "label": "S1", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.1",
+                 "text": "The cardiac cycle conventionally begins with ventricular "
+                         "filling, followed by isovolumetric contraction and ejection. "
+                         "The Frank-Starling mechanism describes how stroke volume "
+                         "increases with preload."},
+                {"id": "eval-canon-9", "label": "S2", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.2",
+                 "text": "Stroke volume is the volume of blood ejected by one "
+                         "ventricle in a single contraction. Cardiac output = stroke "
+                         "volume × heart rate."},
+            ],
+            "expect": {"min_facts": 2, "min_mechanisms": 1, "min_definitions": 1},
+        },
+        {
+            "id": "product-adaptation-profile",
+            "kind": "product",
+            "description": "Product rendering with different adaptation profiles.",
+            "topic": "cardiac cycle",
+            "sources": [
+                {"id": "eval-canon-10", "label": "S1", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.1",
+                 "text": "The cardiac cycle conventionally begins with ventricular "
+                         "filling, followed by isovolumetric contraction and ejection."},
+            ],
+            "artifact_types": ["study_guide", "cheat_sheet"],
+            "expect": {"min_artifacts": 2},
+        },
+        {
+            "id": "canonical-evidence-continuity",
+            "kind": "canonical",
+            "description": "Evidence continuity: all canonical facts cite evidence that exists in source pack.",
+            "topic": "cardiac cycle",
+            "sources": [
+                {"id": "eval-canon-11", "label": "S1", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.1",
+                 "text": "The cardiac cycle conventionally begins with ventricular "
+                         "filling, followed by isovolumetric contraction and ejection."},
+                {"id": "eval-canon-12", "label": "S2", "kind": "textbook",
+                 "source": "fixture", "locator": "fixture p.2",
+                 "text": "Stroke volume is the volume of blood ejected by one "
+                         "ventricle in a single contraction."},
+            ],
+            "expect": {"min_facts": 2, "citation_continuity": True},
+        },
+        {
+            "id": "claim-evidence-type-priority",
+            "kind": "claim_status",
+            "description": "Textbook evidence outranks web evidence in verification.",
+            "topic": "hypertension",
+            "claim": "Thiazide diuretics are first-line for uncomplicated hypertension.",
+            "evidence": [
+                {"id": "eval-htn-1", "label": "S1", "kind": "textbook",
+                 "text": "Thiazide diuretics are recommended as first-line therapy for "
+                         "uncomplicated hypertension by major guidelines."},
+                {"id": "eval-htn-2", "label": "S2", "kind": "web",
+                 "text": "Some sources suggest ACE inhibitors as first-line instead."},
+            ],
+            "stub_verdict": {"relationship": "SUPPORTED", "confidence": 0.9,
+                             "reason": "textbook evidence is authoritative and supports the claim"},
+            "expect": {"status": "SUPPORTED", "min_relationships": 2},
+        },
     ]
 
 
@@ -375,7 +598,7 @@ def _status_metric(status: str) -> Optional[Tuple[str, float]]:
     """Which quality metric a verdict accuracy maps to (if any)."""
     if status == "CONTRADICTED":
         return ("contradiction_recall", 1.0)
-    if status in ("SUPPORTED", "PARTIALLY_SUPPORTED"):
+    if status == "SUPPORTED":
         return ("support_rate", 1.0)
     if status == "INSUFFICIENT_EVIDENCE":
         return ("abstention_accuracy", 1.0)

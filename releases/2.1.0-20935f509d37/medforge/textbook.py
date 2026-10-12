@@ -10,8 +10,8 @@ provenance on top of the existing pipeline:
 - textbook chunks are mirrored into the shared `chunks`+FTS store (and Chroma
   when embedding is enabled) with kind="textbook" and the SOURCE_PRIORITY
   weight, so existing retrieval sees them with zero retrieval changes
-- scanned/no-text pages are recorded as `no_text` with ocr_status='pending';
-  no text is ever invented (OCR integration point left explicit)
+- scanned/no-text pages: OCR via tesseract when available; pages with no
+  extractable text and no OCR are recorded as `no_text` with ocr_status='pending'
 - curriculum_text_links connect curriculum nodes (P2) to textbook evidence
 
 Depends on medforge.types/utils/storage + medforge.curriculum (title_key).
@@ -23,7 +23,9 @@ import hashlib
 import json
 import re
 import sqlite3
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -31,6 +33,14 @@ import medforge.types as T
 from medforge.utils import mkdirs, utcnow
 from medforge.curriculum import title_key
 from medforge.storage import upsert_records
+
+# OCR configuration
+TESSERACT_CMD = "tesseract"
+try:
+    import fitz  # pymupdf
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
 
 __all__ = [
     "ensure_textbook_tables", "resolve_metadata", "register_textbook",
@@ -47,6 +57,11 @@ EMBED_FLUSH_EVERY = 32        # bound RAM while batching embeddings
 # carries real provenance and must not vanish. 5 words filters only fragments.
 MIN_PAGE_CHUNK_WORDS = 5
 
+# OCR settings
+OCR_DPI = 300
+OCR_LANG = "eng"
+OCR_TIMEOUT = 30  # seconds per page
+
 
 def _page_chunks(text: str, max_words: int = 300, overlap: int = 50,
                  min_words: int = MIN_PAGE_CHUNK_WORDS) -> List[str]:
@@ -61,6 +76,52 @@ def _page_chunks(text: str, max_words: int = 300, overlap: int = 50,
         if len(piece.split()) >= min_words:
             out.append(piece)
     return out
+
+
+def _ocr_page_image(pdf_path: Path, page_no: int, dpi: int = OCR_DPI) -> Tuple[str, str]:
+    """Run OCR on a single PDF page using pymupdf + tesseract.
+    
+    Returns (text, ocr_status) where ocr_status is 'complete', 'failed', or 'unavailable'.
+    """
+    if not PYMUPDF_AVAILABLE:
+        return "", "unavailable"
+    
+    try:
+        doc = fitz.open(str(pdf_path))
+        page = doc.load_page(page_no - 1)  # 0-indexed
+        
+        # Render page to pixmap at specified DPI
+        mat = fitz.Matrix(dpi / 72.0, dpi / 72.0)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        
+        # Save to temporary PNG
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp_path = tmp.name
+        pix.save(tmp_path)
+        doc.close()
+        
+        # Run tesseract
+        cmd = [TESSERACT_CMD, tmp_path, "stdout", "-l", OCR_LANG]
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=OCR_TIMEOUT
+        )
+        
+        # Clean up temp file
+        try:
+            Path(tmp_path).unlink()
+        except OSError:
+            pass
+        
+        if result.returncode != 0:
+            return "", "failed"
+        
+        text = result.stdout.strip()
+        return text, "complete" if text else "no_text"
+        
+    except subprocess.TimeoutExpired:
+        return "", "failed"
+    except Exception:
+        return "", "failed"
 
 
 # ─── Schema self-healing ───
@@ -638,13 +699,89 @@ def ingest_textbook(
                     buffer = []
             else:
                 pages_no_text += 1
+                ocr_text = ""
+                ocr_status = "pending"
+                
+                # Attempt OCR on pages with no extractable text
+                if PYMUPDF_AVAILABLE:
+                    ocr_text, ocr_status = _ocr_page_image(source_path, page_no)
+                    if ocr_status == "complete" and ocr_text.strip():
+                        # OCR succeeded - process the OCR text
+                        text = ocr_text
+                        page_status = "ok"
+                        ocr_status = "complete"
+                        
+                        # Re-run structure detection on OCR text
+                        if use_outline:
+                            for level, htitle in outline_events.get(page_no, []):
+                                if level <= 1:
+                                    assign_chapter(htitle, "")
+                                elif level == 2:
+                                    assign_section(htitle, "")
+                                else:
+                                    assign_subsection(htitle, "")
+                        else:
+                            for ntype, code, htitle in _page_headings(text):
+                                if ntype == "Chapter":
+                                    assign_chapter(htitle, code)
+                                elif ntype == "Section":
+                                    assign_section(htitle, code)
+                                else:
+                                    assign_subsection(htitle, code)
+                        
+                        node = current_node()
+                        node_id = node["id"] if node else None
+                        
+                        # Process OCR text like normal text
+                        pages_ok += 1
+                        con.execute(
+                            """INSERT OR REPLACE INTO textbook_pages
+                               (id, edition_id, page_number, node_id, text_chars,
+                                extraction_status, ocr_status, created_at)
+                               VALUES(?,?,?,?,?,?,?,?)""",
+                            (page_id, edition_id, page_no, node_id, len(text), "ok",
+                             ocr_status, now),
+                        )
+                        loc_prefix = " / ".join(
+                            x["title"][:60] for x in (chapter, section, subsection) if x
+                        )
+                        locator = f"p. {page_no}" + (f" · {loc_prefix}" if loc_prefix else "")
+                        for idx, piece in enumerate(_page_chunks(text), 1):
+                            cid = hashlib.sha256(
+                                f"tb|{edition_id}|{page_no}|{idx}".encode()
+                            ).hexdigest()
+                            cur = con.execute(
+                                """INSERT OR IGNORE INTO textbook_chunks
+                                   (id, edition_id, document_id, node_id, page_number,
+                                    chunk_index, text, text_hash, word_count, locator, created_at)
+                                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                                (cid, edition_id, document_id, node_id, page_no, idx, piece,
+                                 hashlib.sha256(piece.encode("utf-8")).hexdigest(),
+                                 len(piece.split()), locator, now),
+                            )
+                            chunks_created += cur.rowcount
+                            buffer.append({
+                                "id": cid,
+                                "text": piece,
+                                "metadata": {
+                                    "source": base_source, "locator": locator,
+                                    "kind": "textbook", "url": "", "quality": quality,
+                                },
+                            })
+                        con.commit()
+                        if len(buffer) >= EMBED_FLUSH_EVERY:
+                            upsert_records(buffer, embed_text=embed_text)
+                            buffer = []
+                        continue  # Skip the else block below
+                
+                # OCR failed or unavailable - record as pending
                 con.execute(
                     """INSERT OR REPLACE INTO textbook_pages
                        (id, edition_id, page_number, node_id, text_chars,
                         extraction_status, ocr_status, created_at)
                        VALUES(?,?,?,?,?,?,?,?)""",
                     (page_id, edition_id, page_no, node_id, 0, page_status,
-                     "pending", now),
+                     ocr_status, now),
                 )
                 con.commit()
 

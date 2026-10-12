@@ -732,11 +732,241 @@ def _set_claim_status(con: sqlite3.Connection, claim_id: str, status: str,
     con.execute(
         """UPDATE claims SET verification_status=?, verification_confidence=?,
                review_status = CASE WHEN review_status='human_reviewed'
-                                    THEN review_status ELSE ? END,
+                                     THEN review_status ELSE ? END,
                updated_at=?
            WHERE claim_id=?""",
         (status, confidence, review, utcnow(), claim_id),
     )
+
+
+# ─── Clinician/Human Review Pathway ───
+#
+# Provides a pathway for human expert (clinician) review of high-risk claims.
+# Clinician verdicts override model-assisted verification and are marked with
+# review_status='human_reviewed'. This pathway is triggered by:
+# - High-risk claim patterns (drug doses, contraindications, etc.)
+# - Explicit clinician review requests
+# - Publication workflow quality gates
+
+
+CLINICIAN_VERDICTS = (
+    "SUPPORTED", "PARTIALLY_SUPPORTED", "UNSUPPORTED", "CONTRADICTED",
+    "INSUFFICIENT_EVIDENCE", "NOT_FACTUAL",
+)
+
+
+def request_clinician_review(
+    claim_id: str,
+    reason: str = "High-risk claim requires clinician validation",
+    requested_by: str = "system",
+) -> Dict[str, Any]:
+    """Mark a claim as requiring clinician review.
+    
+    Sets review_status='needs_review' and records the request.
+    The claim will be picked up by clinician review workflow.
+    """
+    ensure_evidence_tables()
+    con = _connect()
+    try:
+        claim = _row_dict(
+            con.execute("SELECT * FROM claims WHERE claim_id=?", (claim_id,)).fetchone()
+        )
+        if claim is None:
+            raise ValueError(f"Unknown claim_id: {claim_id}")
+        
+        con.execute(
+            """UPDATE claims SET review_status='needs_review', updated_at=?
+               WHERE claim_id=?""",
+            (utcnow(), claim_id),
+        )
+        # Record the request in verification_runs as a special entry
+        # Use INSUFFICIENT_EVIDENCE as result since it's a review request, not a verdict
+        con.execute(
+            """INSERT INTO verification_runs (claim_id, evidence_id, method, result,
+                   confidence, notes, verifier, verifier_version, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (claim_id, None, "clinician-review-request", "INSUFFICIENT_EVIDENCE",
+             None, reason, requested_by, "v1", utcnow()),
+        )
+        con.commit()
+        return {"claim_id": claim_id, "review_status": "needs_review", "reason": reason}
+    finally:
+        con.close()
+
+
+def record_clinician_verdict(
+    claim_id: str,
+    verdict: str,
+    evidence_id: Optional[str] = None,
+    confidence: Optional[float] = None,
+    notes: str = "",
+    reviewer: str = "clinician",
+) -> Dict[str, Any]:
+    """Record a clinician's verdict on a claim.
+    
+    Clinician verdicts override model-assisted verification and set
+    review_status='human_reviewed'. The verdict becomes the definitive
+    status for the claim.
+    
+    Args:
+        claim_id: The claim to adjudicate
+        verdict: One of SUPPORTED, PARTIALLY_SUPPORTED, UNSUPPORTED,
+                 CONTRADICTED, INSUFFICIENT_EVIDENCE, NOT_FACTUAL
+        evidence_id: Optional specific evidence item the verdict addresses
+        confidence: Clinician confidence (0-1)
+        notes: Clinical reasoning / notes
+        reviewer: Name/ID of the reviewing clinician
+    
+    Returns:
+        Updated claim status with review_status='human_reviewed'
+    """
+    if verdict not in CLINICIAN_VERDICTS:
+        raise ValueError(f"verdict must be one of {CLINICIAN_VERDICTS}")
+    
+    ensure_evidence_tables()
+    con = _connect()
+    try:
+        claim = _row_dict(
+            con.execute("SELECT * FROM claims WHERE claim_id=?", (claim_id,)).fetchone()
+        )
+        if claim is None:
+            raise ValueError(f"Unknown claim_id: {claim_id}")
+        
+        # Record the clinician verdict as a verification run
+        con.execute(
+            """INSERT INTO verification_runs (claim_id, evidence_id, method, result,
+                   confidence, notes, verifier, verifier_version, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (claim_id, evidence_id, "clinician-review", verdict,
+             confidence, notes, reviewer, "v1", utcnow()),
+        )
+        
+        # Update claim status - clinician verdict is definitive
+        con.execute(
+            """UPDATE claims SET verification_status=?, verification_confidence=?,
+                   review_status='human_reviewed', updated_at=?
+               WHERE claim_id=?""",
+            (verdict, confidence, utcnow(), claim_id),
+        )
+        
+        # If evidence_id provided, upsert the relationship
+        if evidence_id:
+            con.execute(
+                """INSERT INTO claim_evidence (claim_id, evidence_id, relationship,
+                       support_confidence, verification_method, notes, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(claim_id, evidence_id) DO UPDATE SET
+                       relationship=excluded.relationship,
+                       support_confidence=excluded.support_confidence,
+                       verification_method=excluded.verification_method,
+                       notes=excluded.notes,
+                       updated_at=excluded.updated_at""",
+                (claim_id, evidence_id, _RELATIONSHIP_BY_RESULT.get(verdict, "insufficient"),
+                 confidence, "clinician-review", notes, utcnow(), utcnow()),
+            )
+        
+        con.commit()
+        
+        return {
+            "claim_id": claim_id,
+            "verification_status": verdict,
+            "verification_confidence": confidence,
+            "review_status": "human_reviewed",
+            "reviewer": reviewer,
+            "notes": notes,
+        }
+    finally:
+        con.close()
+
+
+def get_claims_needing_review(
+    status_filter: Optional[str] = None,
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """Get claims that need clinician review.
+    
+    Returns claims with review_status='needs_review', optionally filtered
+    by verification_status.
+    """
+    ensure_evidence_tables()
+    con = _connect()
+    try:
+        if status_filter:
+            rows = con.execute(
+                """SELECT * FROM claims 
+                   WHERE review_status='needs_review' AND verification_status=?
+                   ORDER BY created_at DESC LIMIT ?""",
+                (status_filter, limit),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                """SELECT * FROM claims 
+                   WHERE review_status='needs_review'
+                   ORDER BY created_at DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [_row_dict(r) for r in rows]
+    finally:
+        con.close()
+
+
+def auto_flag_high_risk_claims(
+    claim_ids: Optional[List[str]] = None,
+    max_flags: int = 20,
+) -> Dict[str, Any]:
+    """Auto-flag high-risk claims for clinician review.
+    
+    Uses the same high-risk patterns as the publication workflow.
+    Can be run on specific claim IDs or on all recent claims.
+    """
+    from medforge.publication import HIGH_RISK_PATTERNS
+    
+    ensure_evidence_tables()
+    con = _connect()
+    
+    try:
+        if claim_ids:
+            placeholders = ",".join("?" * len(claim_ids))
+            query = f"SELECT * FROM claims WHERE claim_id IN ({placeholders})"
+            rows = con.execute(query, claim_ids).fetchall()
+        else:
+            rows = con.execute(
+                "SELECT * FROM claims ORDER BY created_at DESC LIMIT ?", (max_flags * 3,)
+            ).fetchall()
+        
+        flagged = []
+        for row in rows:
+            claim = _row_dict(row)
+            claim_text = claim.get("claim_text", "")
+            
+            for pattern_def in HIGH_RISK_PATTERNS:
+                pattern = pattern_def["pattern"]
+                if re.search(pattern, claim_text, re.IGNORECASE):
+                    # Flag for review if not already reviewed
+                    if claim.get("review_status") != "human_reviewed":
+                        request_clinician_review(
+                            claim["claim_id"],
+                            reason=f"High-risk pattern: {pattern_def['issue']} ({pattern_def['severity']})",
+                            requested_by="auto-flag",
+                        )
+                        flagged.append({
+                            "claim_id": claim["claim_id"],
+                            "issue": pattern_def["issue"],
+                            "severity": pattern_def["severity"],
+                            "claim_preview": claim_text[:100] + "..." if len(claim_text) > 100 else claim_text,
+                        })
+                    break
+        
+        return {"flagged_count": len(flagged), "flagged": flagged}
+    finally:
+        con.close()
+
+
+__all__.extend([
+    "request_clinician_review", "record_clinician_verdict",
+    "get_claims_needing_review", "auto_flag_high_risk_claims",
+    "CLINICIAN_VERDICTS",
+])
 
 
 # ─── Verification pipeline ───

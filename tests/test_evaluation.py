@@ -158,17 +158,17 @@ class TestBuiltinRun:
         assert report["pass_rate"] == 1.0
         metrics = report["metrics"]
         assert metrics["abstention_accuracy"] == 1.0
-        assert metrics["abstention_accuracy_cases"] == 2
+        assert metrics["abstention_accuracy_cases"] == 4  # 4 cases test abstention
         assert metrics["support_rate"] == 1.0
-        assert metrics["support_rate_cases"] == 2
+        assert metrics["support_rate_cases"] == 3  # claim-supported, claim-evidence-type-priority, claim-human-reviewed-override
         assert metrics["contradiction_recall"] == 1.0
-        assert metrics["contradiction_recall_cases"] == 1
+        assert metrics["contradiction_recall_cases"] == 2  # claim-contradicted, claim-multiple-evidence-mixed
         assert metrics["grounding_rate"] == 1.0
-        assert metrics["grounding_rate_cases"] == 1  # canonical case measures grounding
+        assert metrics["grounding_rate_cases"] == 5  # 5 canonical cases
         assert metrics["citation_continuity_rate"] == 1.0
-        assert metrics["citation_continuity_rate_cases"] == 2  # canonical + product
+        assert metrics["citation_continuity_rate_cases"] == 9  # 5 canonical + 2 product + 2 claim_status
         assert metrics["consistency_rate"] == 1.0
-        assert metrics["consistency_rate_cases"] == 1  # product case measures consistency
+        assert metrics["consistency_rate_cases"] == 4  # 4 product cases
 
     def test_abstention_case_reports_zero_model_calls(self, eval_env):
         report = EV.run_evaluation()

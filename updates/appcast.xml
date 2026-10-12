@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <!-- MedForge Sparkle update feed. Deploy this file + the .pkg/.dmg to
+       https://medforge.app/updates/ (SUFeedURL in MedForge.app/Contents/Info.plist).
+       TODO (before any public release):
+       1. Generate an EdDSA key: Sparkle's `generate_keys` tool. Put the public
+          key in Info.plist SUPublicEDKey (currently `changeme_ed_key`).
+       2. Sign each enclosure with `sign_update`, add sparkle:edSignature here.
+       3. Sign + notarize the .pkg (currently unsigned) and set the real
+          download URLs below. -->
+  <channel>
+    <title>MedForge Updates</title>
+    <link>https://medforge.app/updates/appcast.xml</link>
+    <description>Local-first AI medical study platform.</description>
+    <language>en</language>
+    <item>
+      <title>MedForge 2.1.0</title>
+      <description><![CDATA[
+        <h3>MedForge 2.1.0</h3>
+        <ul>
+          <li>P8 psychometric validation framework: 3PL information, EAP/MAP scoring, reliability, item/person fit, Mantel-Haenszel DIF, CAT simulation, calibration gate.</li>
+          <li>Installer: clean .pkg (code only, no learner data) with macOS 12+ check, Sparkle auto-update wiring.</li>
+        </ul>
+        <p>Unsigned test build — verify with INSTALL-MEDFORGE.command --verify.</p>
+      ]]></description>
+      <pubDate>Mon, 12 Oct 2026 00:00:00 +0000</pubDate>
+      <enclosure url="https://medforge.app/updates/MedForge-2.1.0.pkg"
+                 sparkle:version="2.1.0"
+                 sparkle:os="macOS"
+                 length="0"
+                 type="application/octet-stream" />
+      <!-- sparkle:edSignature="TODO-sign_update-output" -->
+    </item>
+  </channel>
+</rss>

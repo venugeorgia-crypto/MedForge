@@ -390,23 +390,42 @@ def install_schedule(
     write_only: bool = False,
     python_executable: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Write (and, on macOS, load) the nightly launchd user agent."""
+    """Write (and, on macOS, load) the nightly launchd user agent.
+    
+    On Linux/Windows, installs a cron job or Windows Task Scheduler task.
+    """
     if not 0 <= int(hour) <= 23 or not 0 <= int(minute) <= 59:
         raise ValueError("hour must be 0-23 and minute 0-59")
-    if sys.platform != "darwin":
+    
+    core = Path(__file__).resolve().parent.parent / "medforge_core.py"
+    python = python_executable or sys.executable
+    
+    if sys.platform == "darwin":
+        return _install_launchd(hour, minute, write_only, python)
+    elif sys.platform.startswith("linux"):
+        return _install_cron(hour, minute, write_only, python)
+    elif sys.platform == "win32":
+        return _install_windows_task(hour, minute, write_only, python)
+    else:
+        # Unknown platform - return the command line
         core = Path(__file__).resolve().parent.parent / "medforge_core.py"
-        python = python_executable or sys.executable
         return {
             "platform": sys.platform,
             "installed": False,
-            "reason": "launchd is macOS-only; add this cron line instead",
+            "reason": f"unsupported platform {sys.platform}; run manually or add to scheduler",
+            "command": f"{python} {core} nightly",
             "cron_line": f"{int(minute)} {int(hour)} * * * {python} {core} nightly",
         }
 
+
+def _install_launchd(
+    hour: int, minute: int, write_only: bool, python: str
+) -> Dict[str, Any]:
+    """Install launchd agent on macOS."""
     mkdirs()
     launch_agents_dir().mkdir(parents=True, exist_ok=True)
     path = plist_path()
-    program = nightly_command(python_executable)
+    program = nightly_command(python)
     path.write_text(build_plist_payload(program, hour=hour, minute=minute),
                     encoding="utf-8")
 
@@ -420,7 +439,7 @@ def install_schedule(
             load_error = (proc.stderr or proc.stdout or "").strip()[:300]
 
     return {
-        "platform": sys.platform,
+        "platform": "darwin",
         "installed": True,
         "path": str(path),
         "program": program,
@@ -432,36 +451,253 @@ def install_schedule(
     }
 
 
+def _install_cron(
+    hour: int, minute: int, write_only: bool, python: str
+) -> Dict[str, Any]:
+    """Install cron job on Linux."""
+    core = Path(__file__).resolve().parent.parent / "medforge_core.py"
+    cron_line = f"{int(minute)} {int(hour)} * * * {python} {core} nightly"
+    cron_comment = "# MedForge nightly job"
+    
+    if write_only:
+        return {
+            "platform": "linux",
+            "installed": False,
+            "write_only": True,
+            "cron_line": cron_line,
+            "cron_comment": cron_comment,
+        }
+    
+    # Check if cron entry already exists
+    try:
+        result = subprocess.run(["crontab", "-l"], capture_output=True, text=True, check=False)
+        existing = result.stdout if result.returncode == 0 else ""
+    except Exception:
+        existing = ""
+    
+    # Remove any existing MedForge cron entries
+    lines = [line for line in existing.splitlines() if "medforge_core.py nightly" not in line and line.strip()]
+    lines.append(f"{cron_line} {cron_comment}")
+    new_crontab = "\n".join(lines) + "\n"
+    
+    # Install new crontab
+    try:
+        proc = subprocess.run(["crontab", "-"], input=new_crontab, capture_output=True, text=True, check=True)
+        installed = True
+        install_error = None
+    except subprocess.CalledProcessError as e:
+        installed = False
+        install_error = e.stderr.strip()[:300]
+    
+    return {
+        "platform": "linux",
+        "installed": installed,
+        "cron_line": cron_line,
+        "cron_comment": cron_comment,
+        "install_error": install_error,
+    }
+
+
+def _install_windows_task(
+    hour: int, minute: int, write_only: bool, python: str
+) -> Dict[str, Any]:
+    """Install Windows Task Scheduler task."""
+    core = Path(__file__).resolve().parent.parent / "medforge_core.py"
+    task_name = "MedForge Nightly"
+    cmd = f'"{python}" "{core}" nightly'
+    
+    if write_only:
+        return {
+            "platform": "win32",
+            "installed": False,
+            "write_only": True,
+            "command": cmd,
+            "task_name": task_name,
+            "schedule": f"daily at {hour:02d}:{minute:02d}",
+        }
+    
+    # Check if task already exists
+    try:
+        subprocess.run(["schtasks", "/Query", "/TN", task_name], 
+                       capture_output=True, check=False)
+        # If exists, delete it first
+        subprocess.run(["schtasks", "/Delete", "/TN", task_name, "/F"], 
+                       capture_output=True, check=False)
+    except Exception:
+        pass
+    
+    # Create the task
+    try:
+        result = subprocess.run([
+            "schtasks", "/Create",
+            "/TN", task_name,
+            "/TR", cmd,
+            "/SC", "DAILY",
+            "/ST", f"{hour:02d}:{minute:02d}",
+            "/RL", "HIGHEST",  # Run with highest privileges
+            "/F",  # Force create
+        ], capture_output=True, text=True, check=True)
+        installed = True
+        install_error = None
+    except subprocess.CalledProcessError as e:
+        installed = False
+        install_error = e.stderr.strip()[:300]
+    
+    return {
+        "platform": "win32",
+        "installed": installed,
+        "task_name": task_name,
+        "command": cmd,
+        "schedule": f"daily at {hour:02d}:{minute:02d}",
+        "install_error": install_error,
+    }
+
+
+def install_schedule(
+    hour: int = 3,
+    minute: int = 0,
+    write_only: bool = False,
+    python_executable: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Write (and, on macOS, load) the nightly launchd user agent.
+    
+    On Linux, installs a cron job.
+    On Windows, creates a Task Scheduler task.
+    """
+    if not 0 <= int(hour) <= 23 or not 0 <= int(minute) <= 59:
+        raise ValueError("hour must be 0-23 and minute 0-59")
+    
+    if sys.platform == "darwin":
+        return _install_launchd(hour, minute, write_only, python_executable or sys.executable)
+    elif sys.platform.startswith("linux"):
+        return _install_cron(hour, minute, write_only, python_executable or sys.executable)
+    elif sys.platform == "win32":
+        return _install_windows_task(hour, minute, write_only, python_executable or sys.executable)
+    else:
+        # Unknown platform - return the command line
+        core = Path(__file__).resolve().parent.parent / "medforge_core.py"
+        python = python_executable or sys.executable
+        return {
+            "platform": sys.platform,
+            "installed": False,
+            "reason": f"unsupported platform {sys.platform}; run manually or add to scheduler",
+            "command": f"{python} {core} nightly",
+            "cron_line": f"{int(minute)} {int(hour)} * * * {python} {core} nightly",
+        }
+
+
 def uninstall_schedule() -> Dict[str, Any]:
-    path = plist_path()
-    unloaded = False
-    if sys.platform == "darwin" and path.is_file() and shutil.which("launchctl"):
-        proc = subprocess.run(["launchctl", "unload", str(path)],
-                              capture_output=True, text=True, check=False)
-        unloaded = proc.returncode == 0
-    removed = False
-    if path.is_file():
-        path.unlink()
-        removed = True
-    return {"platform": sys.platform, "path": str(path),
-            "removed": removed, "unloaded": unloaded}
+    if sys.platform == "darwin":
+        path = plist_path()
+        unloaded = False
+        if path.is_file() and shutil.which("launchctl"):
+            proc = subprocess.run(["launchctl", "unload", str(path)],
+                                  capture_output=True, text=True, check=False)
+            unloaded = proc.returncode == 0
+        removed = False
+        if path.is_file():
+            path.unlink()
+            removed = True
+        return {"platform": sys.platform, "path": str(path),
+                "removed": removed, "unloaded": unloaded}
+    elif sys.platform.startswith("linux"):
+        # Remove cron entry
+        try:
+            result = subprocess.run(["crontab", "-l"], capture_output=True, text=True, check=False)
+            existing = result.stdout if result.returncode == 0 else ""
+        except Exception:
+            existing = ""
+        
+        lines = [line for line in existing.splitlines() if "medforge_core.py nightly" not in line and line.strip()]
+        new_crontab = "\n".join(lines) + ("\n" if lines else "")
+        
+        try:
+            subprocess.run(["crontab", "-"], input=new_crontab, capture_output=True, text=True, check=True)
+            removed = True
+            remove_error = None
+        except subprocess.CalledProcessError as e:
+            removed = False
+            remove_error = e.stderr.strip()[:300]
+        
+        return {"platform": sys.platform, "removed": removed, "remove_error": remove_error}
+    elif sys.platform == "win32":
+        task_name = "MedForge Nightly"
+        try:
+            subprocess.run(["schtasks", "/Delete", "/TN", "MedForge Nightly", "/F"],
+                           capture_output=True, check=True)
+            removed = True
+            remove_error = None
+        except subprocess.CalledProcessError as e:
+            removed = False
+            remove_error = e.stderr.strip()[:300]
+        return {"platform": sys.platform, "task_name": "MedForge Nightly",
+                "removed": removed, "remove_error": remove_error}
+    else:
+        return {"platform": sys.platform, "removed": False,
+                "reason": f"unsupported platform {sys.platform}"}
 
 
 def schedule_status() -> Dict[str, Any]:
-    path = plist_path()
-    installed = path.is_file()
-    loaded: Optional[bool] = None
-    if sys.platform == "darwin" and shutil.which("launchctl"):
-        proc = subprocess.run(["launchctl", "list"], capture_output=True, text=True,
-                              check=False)
-        loaded = PLIST_LABEL in (proc.stdout or "")
-    return {
-        "platform": sys.platform,
-        "label": PLIST_LABEL,
-        "path": str(path),
-        "installed": installed,
-        "loaded": loaded,
-    }
+    if sys.platform == "darwin":
+        path = plist_path()
+        installed = path.is_file()
+        loaded: Optional[bool] = None
+        if shutil.which("launchctl"):
+            proc = subprocess.run(["launchctl", "list"], capture_output=True, text=True,
+                                  check=False)
+            loaded = PLIST_LABEL in (proc.stdout or "")
+        return {
+            "platform": "darwin",
+            "label": PLIST_LABEL,
+            "path": str(path),
+            "installed": installed,
+            "loaded": loaded,
+        }
+    elif sys.platform.startswith("linux"):
+        # Check crontab
+        try:
+            result = subprocess.run(["crontab", "-l"], capture_output=True, text=True, check=False)
+            existing = result.stdout if result.returncode == 0 else ""
+            installed = "medforge_core.py nightly" in existing
+            # Check if cron daemon is running
+            loaded = None
+            try:
+                subprocess.run(["systemctl", "is-active", "cron"], capture_output=True, check=True)
+                loaded = True
+            except Exception:
+                try:
+                    subprocess.run(["systemctl", "is-active", "crond"], capture_output=True, check=True)
+                    loaded = True
+                except Exception:
+                    loaded = False
+        except Exception:
+            installed = False
+            loaded = False
+        return {
+            "platform": "linux",
+            "installed": installed,
+            "loaded": loaded,
+        }
+    elif sys.platform == "win32":
+        # Check Windows Task Scheduler
+        task_name = "MedForge Nightly"
+        try:
+            result = subprocess.run(["schtasks", "/Query", "/TN", "MedForge Nightly", "/FO", "LIST"],
+                                    capture_output=True, text=True, check=True)
+            installed = True
+            # Check if task is enabled
+            loaded = "Status:" in result.stdout and "Ready" in result.stdout
+        except subprocess.CalledProcessError:
+            installed = False
+            loaded = False
+        return {
+            "platform": "win32",
+            "task_name": "MedForge Nightly",
+            "installed": installed,
+            "loaded": loaded,
+        }
+    else:
+        return {"platform": sys.platform, "installed": False, "loaded": False}
 
 
 __all__ = [

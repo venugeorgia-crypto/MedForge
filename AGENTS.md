@@ -85,8 +85,16 @@ AUDIT → REQUIREMENTS → ACCEPTANCE TESTS → SMALLEST SAFE PATCH → TEST
   knowledge_refresh_runs, knowledge_notifications; V15 = automation_jobs,
   automation_runs; V16 = evaluation_runs, evaluation_cases). P15 intentionally
   adds **no** migration (behaviour only).
-- Tests: 422 passing (+1 skipped integration).
-- Pending phases: P17 packaging, P18 production readiness.
+- Tests: 477 passing (+1 skipped integration).
+- Landed 2026-10-13: P8 psychometric validation extension in
+  `medforge/assessment.py` (3PL info, EAP/MAP, alpha, infit/outfit, MH DIF,
+  CAT simulate, calibrate + validate; `tests/test_psychometrics.py`, CLI
+  `assessment psychometrics [irt|info|demo]`); installer rebuilt —
+  `MedForge-2.1.0.pkg` is code-only (no learner DB) with macOS 12+ check,
+  `MedForge-2.1.0.dmg` verified, `updates/appcast.xml` drafted,
+  `INSTALL-MEDFORGE.command` rebuilt (`2.1.0-0b2413526764`). Unsigned;
+  signing/notarization + feed deployment still required before release.
+- Pending phases: P17 packaging (sign/notarize/deploy), P18 production readiness.
 
 ## Skills
 

@@ -58,6 +58,10 @@ __all__ = [
     "get_assessment_result", "get_item_statistics", "compute_item_quality",
     "get_assessment_remediation", "review_assessment", "list_assessments",
     "resume_assessment", "public_assessment_view", "assessment_export",
+    "irt_3pl_probability", "item_information", "test_information",
+    "eap_ability", "map_ability", "cronbach_alpha", "item_fit", "person_fit",
+    "dif_mantel_haenszel", "cat_next_item", "cat_simulate",
+    "calibrate_item_bank", "validate_calibration",
 ]
 
 ROUND = 4
@@ -2983,6 +2987,255 @@ def _attempt_total_percentage(assessment_id: str) -> Optional[float]:
     return None if session.get("percentage") is None else float(session["percentage"])
 
 
+def _compute_irt_parameters(
+    graded: List[Dict[str, Any]],
+    item_type: str,
+) -> Dict[str, Any]:
+    """Compute IRT (Item Response Theory) parameters for an item.
+    
+    Implements 1PL (Rasch) and 2PL models. For MCQ items with multiple
+    distractors, we can estimate pseudo-guessing parameter for 3PL.
+    
+    Returns parameter estimates with standard errors when sample is sufficient.
+    """
+    sample = len(graded)
+    min_sample = T.ASSESSMENT_MIN_ITEM_STAT_SAMPLE
+    
+    if sample < min_sample:
+        return {
+            "model": "none",
+            "sample_size": sample,
+            "note": f"insufficient sample for IRT (need ≥{min_sample}, got {sample})",
+            "parameters": None,
+            "standard_errors": None,
+            "test_info": None,
+        }
+    
+    # Prepare response data: 1 for correct, 0 for incorrect
+    responses = [1 if r.get("correctness") == "correct" else 0 for r in graded]
+    n = len(responses)
+    
+    # Try to get ability estimates (theta) for each respondent
+    # For now, use total score as proxy for ability (will improve with full IRT)
+    con = _connect()
+    try:
+        # Get ability estimates from assessment scores
+        thetas = {}
+        for r in graded:
+            aid = r.get("assessment_id")
+            if aid:
+                # Get assessment result for this attempt
+                theta = _estimate_ability(con, aid, r.get("attempt_id"))
+                if theta is not None:
+                    thetas[r.get("attempt_id")] = theta
+    finally:
+        con.close()
+    
+    # Filter to responses where we have ability estimates
+    paired = [(r, thetas.get(r.get("attempt_id"))) for r in graded if thetas.get(r.get("attempt_id")) is not None]
+    if len(paired) < min(10, sample // 2):
+        return {
+            "model": "1PL",
+            "sample_size": sample,
+            "note": f"insufficient ability estimates for IRT (need ≥10 paired, got {len(paired)})",
+            "parameters": None,
+            "standard_errors": None,
+            "test_info": None,
+        }
+    
+    # Prepare paired data
+    responses_paired = [1 if r.get("correctness") == "correct" else 0 for r, _ in paired]
+    thetas_paired = [theta for _, theta in paired]
+    
+    # 1PL (Rasch) model: P = 1 / (1 + exp(-(theta - b)))
+    # where b = difficulty, theta = ability
+    # Estimate difficulty parameter b using marginal maximum likelihood (simplified)
+    b = _estimate_1pl_difficulty(responses_paired, thetas_paired)
+    
+    # 2PL model: P = 1 / (1 + exp(-a*(theta - b)))
+    # where a = discrimination, b = difficulty
+    a, b_2pl = _estimate_2pl_parameters(responses_paired, thetas_paired)
+    
+    # For MCQ items, we can also estimate guessing parameter (3PL)
+    # but this requires more sophisticated estimation
+    c = 0.0
+    if "MCQ" in item_type.upper():
+        c = 1.0 / 4.0  # Pseudo-guessing for 4-option MCQ (rough estimate)
+    
+    # Compute test information function at theta=0 (average ability)
+    test_info = _compute_test_information(thetas_paired, a, b, c)
+    
+    # Standard errors (approximate via Fisher information)
+    se_b = _se_difficulty_1pl(thetas_paired, b) if b is not None else None
+    se_a = _se_discrimination_2pl(thetas_paired, a, b) if a is not None else None
+    
+    return {
+        "model": "2PL" if a is not None else "1PL",
+        "sample_size": sample,
+        "paired_count": len(paired),
+        "parameters": {
+            "discrimination": _round(a),
+            "difficulty": _round(b if b is not None else b_2pl),
+            "guessing": _round(c),
+        },
+        "standard_errors": {
+            "discrimination": _round(se_a),
+            "difficulty": _round(se_b),
+        },
+        "test_info": test_info,
+        "note": "IRT estimates are provisional; requires larger sample for validation",
+    }
+
+
+def _estimate_ability(con: sqlite3.Connection, assessment_id: str, attempt_id: str) -> Optional[float]:
+    """Estimate ability (theta) for a learner from their assessment score."""
+    try:
+        # Get the assessment result
+        result = con.execute(
+            "SELECT result FROM assessment_sessions WHERE assessment_id=?",
+            (assessment_id,),
+        ).fetchone()
+        if result:
+            summary = _json_load(result[0], {})
+            raw_score = summary.get("raw_score")
+            max_score = summary.get("max_score")
+            if raw_score is not None and max_score and max_score > 0:
+                # Convert to theta (normal distribution, mean 0, sd 1)
+                # Using probit transformation
+                p = max(0.01, min(0.99, raw_score / max_score))
+                import math
+                return math.log(p / (1 - p))
+    except Exception:
+        pass
+    return None
+
+
+def _estimate_1pl_difficulty(responses: List[int], thetas: List[float]) -> Optional[float]:
+    """Estimate 1PL (Rasch) difficulty parameter b using MLE (simplified)."""
+    if not responses or not thetas or len(responses) != len(thetas):
+        return None
+    n = len(responses)
+    # Simple method: b ≈ mean(theta) - logit(mean(correct))
+    import math
+    mean_theta = sum(thetas) / n
+    prop_correct = sum(responses) / n
+    if prop_correct <= 0 or prop_correct >= 1:
+        return None
+    logit_p = math.log(prop_correct / (1 - prop_correct))
+    b = mean_theta - logit_p
+    return b
+
+
+def _estimate_2pl_parameters(responses: List[int], thetas: List[float]) -> tuple:
+    """Estimate 2PL discrimination (a) and difficulty (b) parameters.
+    
+    Uses a simplified joint maximum likelihood approach.
+    Returns (a, b) or (None, None) if estimation fails.
+    """
+    if not responses or not thetas or len(responses) != len(thetas):
+        return None, None
+    import math
+    n = len(responses)
+    
+    # Simple approach: fit logistic regression
+    # logit(P) = a*theta - a*b = a*theta - b'
+    # where b' = a*b (so difficulty in logit space is b')
+    
+    # Use method of moments approximation
+    mean_theta = sum(thetas) / n
+    prop_correct = sum(responses) / n
+    
+    if prop_correct <= 0.05 or prop_correct >= 0.95:
+        return None, None
+    
+    # Variance of theta
+    var_theta = sum((t - mean_theta)**2 for t in thetas) / n
+    
+    # Point-biserial correlation as proxy for discrimination
+    correct_thetas = [t for r, t in zip(responses, thetas) if r == 1]
+    incorrect_thetas = [t for r, t in zip(responses, thetas) if r == 0]
+    
+    if not correct_thetas or not incorrect_thetas:
+        return None, None
+    
+    mean_correct = sum(correct_thetas) / len(correct_thetas)
+    mean_incorrect = sum(incorrect_thetas) / len(incorrect_thetas)
+    
+    # Point-biserial correlation
+    sd_theta = math.sqrt(var_theta)
+    if sd_theta <= 0:
+        return None, None
+    
+    r_pb = (mean_correct - mean_incorrect) / sd_theta * math.sqrt(prop_correct * (1 - prop_correct))
+    
+    # Convert to 2PL discrimination parameter (approximate)
+    # a ≈ r_pb / (sqrt(prop*(1-prop)) * (π/√3)) for logistic
+    scale = math.pi / math.sqrt(3)
+    a = r_pb / (math.sqrt(prop_correct * (1 - prop_correct)) * scale)
+    
+    if a <= 0 or a > 5:  # Reasonable bounds
+        return None, None
+    
+    # Difficulty b' = a * b = -logit(p) + a * mean_theta
+    # where logit(p) = log(p/(1-p))
+    logit_p = math.log(prop_correct / (1 - prop_correct))
+    b_prime = a * mean_theta - logit_p
+    b = b_prime / a if a != 0 else None
+    
+    return a, b
+
+
+def _compute_test_information(thetas: List[float], a: Optional[float], b: Optional[float], c: float) -> Dict[str, float]:
+    """Compute test information function at various theta points."""
+    import math
+    info = {}
+    for theta in [-2, -1, 0, 1, 2]:
+        if a is not None and b is not None:
+            # 2PL information: I(θ) = a² * P(θ) * (1-P(θ)) where P(θ) = 1/(1+exp(-a(θ-b)))
+            logit = a * (theta - b)
+            p = 1 / (1 + math.exp(-logit))
+            if c > 0:
+                # 3PL: P(θ) = c + (1-c) * 1/(1+exp(-a(θ-b)))
+                p = c + (1 - c) * 1 / (1 + math.exp(-a * (theta - b)))
+            info_val = a**2 * p * (1 - p)
+        else:
+            # 1PL information
+            if b is not None:
+                logit = theta - b
+                p = 1 / (1 + math.exp(-logit))
+                info_val = p * (1 - p)
+            else:
+                info_val = 0
+        info[theta] = _round(info_val)
+    return info
+
+
+def _se_difficulty_1pl(thetas: List[float], b: float) -> Optional[float]:
+    """Standard error of 1PL difficulty parameter."""
+    if not thetas or b is None:
+        return None
+    import math
+    n = len(thetas)
+    # Fisher information for b in 1PL: sum(P_i * (1-P_i))
+    info = sum(1 / (1 + math.exp(theta - b)) * (1 - 1 / (1 + math.exp(theta - b))) for theta in thetas)
+    if info <= 0:
+        return None
+    return _round(1 / math.sqrt(info))
+
+
+def _se_discrimination_2pl(thetas: List[float], a: float, b: float) -> Optional[float]:
+    """Standard error of 2PL discrimination parameter (approximate)."""
+    if not thetas or a is None or b is None:
+        return None
+    import math
+    n = len(thetas)
+    # Approximate Fisher information for a
+    info = sum((theta - b)**2 / (1 + math.exp(a * (theta - b)))**2 for theta in thetas)
+    if info <= 0:
+        return None
+    return _round(1 / math.sqrt(info))
+
+
 def _statistics_for(item_id: str, item_version: Optional[int] = None,
                     now: Optional[str] = None) -> Dict[str, Any]:
     item = get_item(item_id, item_version)
@@ -3063,6 +3316,7 @@ def _statistics_for(item_id: str, item_version: Optional[int] = None,
         },
         "discrimination": discrimination,
         "discrimination_note": discrimination_note,
+        "irt": _compute_irt_parameters(graded, item["item_type"]),
         "grading": {
             "sources": sorted({r.get("grading_source") for r in graded if r.get("grading_source")}),
             "retryable_attempts": sum(1 for r in answered if r.get("grading_status") == "retryable"),
@@ -3184,3 +3438,385 @@ def assessment_export(assessment_id: str, *, include_responses: bool = False) ->
     if include_responses:
         export["questions"] = review_assessment(assessment_id, include_answers=True)["questions"]
     return export
+
+
+# ─── Psychometric validation framework (P8 extension, pure-math) ───
+# All functions below are deterministic, use only the stdlib, touch no
+# database and call no model. They operate on plain response vectors so they
+# are safe to unit-test offline. Estimates are labelled provisional: nothing
+# here is a competence claim (see P6/dashboard wording).
+
+_PSY_MIN_SAMPLE = 30
+_PSY_FIT_LO = 0.5
+_PSY_FIT_HI = 1.5
+
+
+def irt_3pl_probability(theta: float, a: float, b: float, c: float = 0.0) -> float:
+    """3PL response probability P(X=1|theta). Reduces to 2PL when c=0, 1PL when a=1."""
+    import math
+    if a is None or b is None or theta is None:
+        raise ValueError("theta, a and b are required")
+    a = float(a); b = float(b); c = float(c or 0.0)
+    if not (0.0 <= c < 1.0):
+        raise ValueError("guessing c must be in [0, 1)")
+    try:
+        core = 1.0 / (1.0 + math.exp(-a * (float(theta) - b)))
+    except OverflowError:
+        core = 0.0 if a * (float(theta) - b) < 0 else 1.0
+    return _round(c + (1.0 - c) * core)
+
+
+def item_information(theta: float, a: float, b: float, c: float = 0.0) -> float:
+    """Fisher item information I(theta) for the 3PL model."""
+    import math
+    p = irt_3pl_probability(theta, a, b, c)
+    a = float(a); c = float(c or 0.0)
+    if p <= 0.0 or p >= 1.0:
+        return 0.0
+    if c == 0.0:
+        return _round(a * a * p * (1.0 - p))
+    # 3PL information: a^2 * (1-P)/P * ((P-c)/(1-c))^2
+    q = 1.0 - p
+    info = a * a * (q / p) * ((p - c) / (1.0 - c)) ** 2
+    return _round(max(0.0, info))
+
+
+def test_information(theta: float, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Sum item informations at theta; also returns SEM = 1/sqrt(info)."""
+    import math
+    infos = [float(item_information(theta, float(it.get("a", 1.0)),
+                                    float(it.get("b", 0.0)),
+                                    float(it.get("c", 0.0)))) for it in (items or [])]
+    total = sum(infos)
+    sem = (1.0 / math.sqrt(total)) if total > 0 else None
+    return {"theta": _round(float(theta)), "total": _round(total),
+            "sem": _round(sem) if sem is not None else None,
+            "items": len(infos)}
+
+
+def _log_likelihood(theta: float, responses: List[int],
+                    items: List[Dict[str, Any]]) -> float:
+    import math
+    ll = 0.0
+    for x, it in zip(responses, items):
+        p = irt_3pl_probability(theta, float(it.get("a", 1.0)),
+                                float(it.get("b", 0.0)), float(it.get("c", 0.0)))
+        p = min(0.999999, max(0.000001, p))
+        ll += math.log(p) if int(x) == 1 else math.log(1.0 - p)
+    return ll
+
+
+def eap_ability(responses: List[int], items: List[Dict[str, Any]],
+                prior_mean: float = 0.0, prior_sd: float = 1.0,
+                lo: float = -4.0, hi: float = 4.0,
+                points: int = 41) -> Dict[str, Any]:
+    """Expected a posteriori ability estimate (Gauss-Hermite-style grid, normal prior)."""
+    import math
+    if not responses or not items or len(responses) != len(items):
+        raise ValueError("responses and items must be non-empty and aligned")
+    n = max(11, int(points))
+    step = (hi - lo) / (n - 1)
+    grid = [lo + i * step for i in range(n)]
+    weights = []
+    for t in grid:
+        like = math.exp(_log_likelihood(t, [int(bool(x)) for x in responses], items))
+        prior = math.exp(-0.5 * ((t - prior_mean) / prior_sd) ** 2)
+        weights.append(like * prior)
+    total = sum(weights)
+    if total <= 0:
+        return {"theta": 0.0, "se": None, "note": "likelihood underflow; returned prior mean"}
+    post = [w / total for w in weights]
+    mean = sum(t * w for t, w in zip(grid, post))
+    var = sum(w * (t - mean) ** 2 for t, w in zip(grid, post))
+    se = math.sqrt(var) if var > 0 else None
+    return {"theta": _round(mean), "se": _round(se) if se is not None else None,
+            "method": "EAP", "n_items": len(items)}
+
+
+def map_ability(responses: List[int], items: List[Dict[str, Any]],
+                prior_mean: float = 0.0, prior_sd: float = 1.0) -> Dict[str, Any]:
+    """Maximum a posteriori ability estimate (bounded Newton-Raphson, normal prior)."""
+    import math
+    if not responses or not items or len(responses) != len(items):
+        raise ValueError("responses and items must be non-empty and aligned")
+    resp = [int(bool(x)) for x in responses]
+    theta = 0.0
+    for _ in range(50):
+        h = 1e-4
+        f0 = _log_likelihood(theta, resp, items) - 0.5 * ((theta - prior_mean) / prior_sd) ** 2
+        fp = _log_likelihood(theta + h, resp, items) - 0.5 * ((theta + h - prior_mean) / prior_sd) ** 2
+        fm = _log_likelihood(theta - h, resp, items) - 0.5 * ((theta - h - prior_mean) / prior_sd) ** 2
+        grad = (fp - fm) / (2 * h)
+        curv = (fp - 2 * f0 + fm) / (h * h)
+        if curv >= 0:
+            break
+        step = grad / curv
+        theta = max(-4.0, min(4.0, theta - step))
+        if abs(grad) < 1e-6:
+            break
+    info = test_information(theta, items)["total"] or 0.0
+    post_info = info + 1.0 / (prior_sd ** 2)
+    se = 1.0 / math.sqrt(post_info) if post_info > 0 else None
+    return {"theta": _round(theta), "se": _round(se) if se is not None else None,
+            "method": "MAP", "n_items": len(items)}
+
+
+def cronbach_alpha(score_matrix: List[List[float]]) -> Dict[str, Any]:
+    """Cronbach's alpha reliability for a person x item score matrix."""
+    k = len(score_matrix[0]) if score_matrix else 0
+    n = len(score_matrix)
+    if n < 2 or k < 2:
+        return {"alpha": None, "n_persons": n, "n_items": k,
+                "note": "need >=2 persons and >=2 items"}
+    import math
+    col_vars = []
+    for j in range(k):
+        col = [float(row[j]) for row in score_matrix]
+        m = sum(col) / n
+        col_vars.append(sum((v - m) ** 2 for v in col) / (n - 1) if n > 1 else 0.0)
+    totals = [sum(float(v) for v in row) for row in score_matrix]
+    mt = sum(totals) / n
+    tot_var = sum((v - mt) ** 2 for v in totals) / (n - 1) if n > 1 else 0.0
+    if tot_var <= 0:
+        return {"alpha": None, "n_persons": n, "n_items": k,
+                "note": "no total-score variance"}
+    alpha = (k / (k - 1.0)) * (1.0 - sum(col_vars) / tot_var)
+    return {"alpha": _round(max(0.0, min(1.0, alpha))), "n_persons": n, "n_items": k}
+
+
+def item_fit(responses: List[int], thetas: List[float], a: float, b: float,
+             c: float = 0.0) -> Dict[str, Any]:
+    """Rasch-style infit/outfit mean-squares for one item over persons."""
+    if not responses or len(responses) != len(thetas):
+        raise ValueError("responses and thetas must be non-empty and aligned")
+    zs: List[float] = []
+    ws: List[float] = []
+    for x, t in zip(responses, thetas):
+        p = irt_3pl_probability(float(t), a, b, c)
+        var = p * (1.0 - p)
+        if var <= 1e-9:
+            continue
+        z = (float(int(bool(x))) - p) / (var ** 0.5)
+        zs.append(z * z)
+        ws.append(var)
+    if not zs:
+        return {"infit": None, "outfit": None, "n": 0,
+                "note": "no informative observations"}
+    outfit = sum(zs) / len(zs)
+    wsum = sum(ws)
+    infit = sum(w * z for w, z in zip(ws, zs)) / wsum if wsum > 0 else None
+    flag = ((infit is not None and (infit < _PSY_FIT_LO or infit > _PSY_FIT_HI))
+            or outfit < _PSY_FIT_LO or outfit > _PSY_FIT_HI)
+    return {"infit": _round(infit) if infit is not None else None,
+            "outfit": _round(outfit), "n": len(zs),
+            "flagged": bool(flag),
+            "band": [_PSY_FIT_LO, _PSY_FIT_HI]}
+
+
+def person_fit(response_vector: List[int], theta: float,
+               items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Infit/outfit for one person over items."""
+    if not response_vector or len(response_vector) != len(items):
+        raise ValueError("response vector and items must be non-empty and aligned")
+    thetas = [float(theta)] * len(items)
+    a_list = [float(it.get("a", 1.0)) for it in items]
+    # pooled approximation: evaluate each item with its own parameters
+    zs: List[float] = []
+    ws: List[float] = []
+    for x, it in zip(response_vector, items):
+        p = irt_3pl_probability(float(theta), float(it.get("a", 1.0)),
+                                float(it.get("b", 0.0)), float(it.get("c", 0.0)))
+        var = p * (1.0 - p)
+        if var <= 1e-9:
+            continue
+        z = (float(int(bool(x))) - p) / (var ** 0.5)
+        zs.append(z * z)
+        ws.append(var)
+    _ = (thetas, a_list)
+    if not zs:
+        return {"infit": None, "outfit": None, "n": 0,
+                "note": "no informative observations"}
+    outfit = sum(zs) / len(zs)
+    wsum = sum(ws)
+    infit = sum(w * z for w, z in zip(ws, zs)) / wsum if wsum > 0 else None
+    return {"infit": _round(infit) if infit is not None else None,
+            "outfit": _round(outfit), "n": len(zs)}
+
+
+def dif_mantel_haenszel(strata: List[Dict[str, int]]) -> Dict[str, Any]:
+    """Mantel-Haenszel DIF: common odds ratio (focal vs reference) + ETS class.
+
+    Each stratum: {"ref_correct","ref_n","foc_correct","foc_n"} matched on
+    total score. OR < 1 favours the reference group, OR > 1 the focal group.
+    """
+    import math
+    num = 0.0
+    den = 0.0
+    chi_num = 0.0
+    chi_den = 0.0
+    used = 0
+    for s in (strata or []):
+        a = int(s.get("foc_correct", 0))
+        n1 = int(s.get("foc_n", 0))
+        c_ = int(s.get("ref_correct", 0))
+        n2 = int(s.get("ref_n", 0))
+        b = n1 - a
+        d = n2 - c_
+        n = n1 + n2
+        if n <= 0 or a < 0 or b < 0 or c_ < 0 or d < 0:
+            continue
+        num += (a * d) / n
+        den += (b * c_) / n
+        # MH chi-square components
+        e_a = n1 * (a + c_) / n if n else 0.0
+        v_a = (n1 * n2 * (a + c_) * (b + d)) / (n * n * (n - 1)) if n > 1 else 0.0
+        if v_a > 0:
+            chi_num += (a - e_a)
+            chi_den += v_a
+            used += 1
+    if den <= 0 or num <= 0:
+        return {"mh_odds_ratio": None, "mh_chi_square": None, "p_value": None,
+                "ets_class": "A", "strata_used": used,
+                "note": "insufficient data for MH DIF"}
+    oddsratio = num / den
+    # continuity-corrected MH chi-square
+    corr = 0.5
+    diff = abs(chi_num) - corr
+    chi2 = (diff * diff / chi_den) if chi_den > 0 and diff > 0 else 0.0
+    p_value = math.erfc(math.sqrt(chi2 / 2.0)) if chi2 >= 0 else 1.0
+    # ETS delta scale: delta = -2.35 * ln(OR)
+    delta = -2.35 * math.log(oddsratio)
+    if abs(delta) < 1.0 or p_value >= 0.05:
+        ets = "A"
+    elif abs(delta) < 1.5:
+        ets = "B"
+    else:
+        ets = "C"
+    return {"mh_odds_ratio": _round(oddsratio), "mh_chi_square": _round(chi2),
+            "p_value": _round(p_value), "mh_delta": _round(delta),
+            "ets_class": ets, "strata_used": used,
+            "flagged": bool(ets in ("B", "C") and p_value < 0.05)}
+
+
+def cat_next_item(theta: float, items: List[Dict[str, Any]],
+                  administered_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Maximum-information CAT item selection among unadministered items."""
+    done = set(administered_ids or [])
+    best: Optional[Dict[str, Any]] = None
+    best_info = -1.0
+    for it in (items or []):
+        iid = str(it.get("item_id", ""))
+        if iid in done:
+            continue
+        info = float(item_information(theta, float(it.get("a", 1.0)),
+                                      float(it.get("b", 0.0)),
+                                      float(it.get("c", 0.0))))
+        if info > best_info:
+            best_info = info
+            best = it
+    if best is None:
+        return {"item_id": None, "information": 0.0, "remaining": 0}
+    return {"item_id": str(best.get("item_id")),
+            "information": _round(best_info),
+            "remaining": sum(1 for it in items if str(it.get("item_id")) not in done) - 1}
+
+
+def cat_simulate(true_theta: float, items: List[Dict[str, Any]],
+                 max_items: int = 10, start_theta: float = 0.0,
+                 seed: int = 7) -> Dict[str, Any]:
+    """Deterministic CAT simulation: seeded Bernoulli responses, EAP re-estimation."""
+    import math
+    rng = random.Random(int(seed))
+    if not items:
+        raise ValueError("items must be non-empty")
+    theta_hat = float(start_theta)
+    administered: List[str] = []
+    trajectory: List[Dict[str, Any]] = []
+    responses: List[int] = []
+    used: List[Dict[str, Any]] = []
+    for _ in range(min(int(max_items), len(items))):
+        nxt = cat_next_item(theta_hat, items, administered)
+        if not nxt.get("item_id"):
+            break
+        it = next(i for i in items if str(i.get("item_id")) == nxt["item_id"])
+        p = irt_3pl_probability(true_theta, float(it.get("a", 1.0)),
+                                float(it.get("b", 0.0)), float(it.get("c", 0.0)))
+        x = 1 if rng.random() < p else 0
+        administered.append(nxt["item_id"])
+        responses.append(x)
+        used.append(it)
+        est = eap_ability(responses, used)
+        theta_hat = float(est["theta"])
+        trajectory.append({"item_id": nxt["item_id"], "response": x,
+                           "theta_hat": est["theta"], "se": est["se"],
+                           "info": nxt["information"]})
+    info = test_information(theta_hat, used)["total"] or 0.0
+    se = 1.0 / math.sqrt(info) if info > 0 else None
+    return {"true_theta": _round(float(true_theta)),
+            "theta_hat": _round(theta_hat),
+            "se": _round(se) if se is not None else None,
+            "bias": _round(theta_hat - float(true_theta)),
+            "n_administered": len(administered),
+            "administered": administered, "trajectory": trajectory}
+
+
+def calibrate_item_bank(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calibrate a bank from response/theta pairs using existing 1PL/2PL estimators.
+
+    Each entry: {"item_id","responses":[...],"thetas":[...],"item_type":"MCQ_SINGLE"}.
+    Reuses _estimate_1pl_difficulty / _estimate_2pl_parameters (no DB).
+    """
+    calibrated: Dict[str, Any] = {}
+    for e in (entries or []):
+        iid = str(e.get("item_id", ""))
+        resp = [int(bool(x)) for x in (e.get("responses") or [])]
+        thetas = [float(t) for t in (e.get("thetas") or [])]
+        if not iid or len(resp) != len(thetas) or len(resp) < _PSY_MIN_SAMPLE:
+            calibrated[iid or "?"] = {
+                "model": "none", "note": f"need >={_PSY_MIN_SAMPLE} paired observations",
+                "parameters": None}
+            continue
+        b1 = _estimate_1pl_difficulty(resp, thetas)
+        a2, b2 = _estimate_2pl_parameters(resp, thetas)
+        c = 0.25 if "MCQ" in str(e.get("item_type", "MCQ_SINGLE")).upper() else 0.0
+        calibrated[iid] = {
+            "model": "2PL" if a2 is not None else "1PL",
+            "parameters": {"a": _round(a2) if a2 is not None else 1.0,
+                           "b": _round(b2 if b2 is not None else b1),
+                           "c": _round(c)},
+            "n": len(resp),
+            "note": "provisional calibration; requires independent validation sample",
+        }
+    return {"items": calibrated, "count": len(calibrated),
+            "engine_version": T.ASSESSMENT_VERSION}
+
+
+def validate_calibration(calibration: Dict[str, Any],
+                         dif_results: Optional[Dict[str, str]] = None,
+                         fit_results: Optional[Dict[str, Dict[str, Any]]] = None,
+                         min_n: int = _PSY_MIN_SAMPLE) -> Dict[str, Any]:
+    """Validation gate over a calibration: sample, SE sanity, fit band, DIF flags."""
+    issues: List[str] = []
+    items = (calibration or {}).get("items", {}) or {}
+    if not items:
+        return {"passed": False, "issues": ["empty calibration"], "checked": 0}
+    for iid, cal in items.items():
+        params = (cal or {}).get("parameters") or {}
+        n = int((cal or {}).get("n", 0))
+        if (cal or {}).get("model") == "none" or not params:
+            issues.append(f"{iid}: uncalibrated")
+            continue
+        if n < min_n:
+            issues.append(f"{iid}: small sample (n={n})")
+        a = params.get("a")
+        if a is not None and not (0.2 <= float(a) <= 3.0):
+            issues.append(f"{iid}: discrimination out of range (a={a})")
+        fit = (fit_results or {}).get(iid) or {}
+        for key in ("infit", "outfit"):
+            v = fit.get(key)
+            if v is not None and (v < _PSY_FIT_LO or v > _PSY_FIT_HI):
+                issues.append(f"{iid}: {key} misfit ({v})")
+        if (dif_results or {}).get(iid) in ("B", "C"):
+            issues.append(f"{iid}: DIF flag {(dif_results or {})[iid]}")
+    return {"passed": not issues, "issues": issues, "checked": len(items),
+            "note": "validation gate only; nothing is auto-published"}

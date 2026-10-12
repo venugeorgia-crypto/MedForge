@@ -65,6 +65,9 @@ from medforge import (  # noqa: E402
     submit_assessment_answer, flag_item, next_item, previous_item,
     complete_assessment, get_assessment_result, get_item_statistics,
     get_assessment_remediation, review_assessment, list_assessments,
+    irt_3pl_probability, item_information, test_information,
+    eap_ability, map_ability, cronbach_alpha, dif_mantel_haenszel,
+    cat_simulate, validate_calibration,
     ASSESSMENT_ITEM_TYPES, ASSESSMENT_MODES,
     ensure_study_tables, get_study_status, recommend_next_action,
     get_knowledge_gaps, get_readiness, build_study_plan, get_plan, list_plans,
@@ -153,6 +156,7 @@ def main() -> None:
               "assessment item-info <item_id>[|<version>] | "
               "assessment stats <item_id>[|<version>] | "
               "assessment blueprint-new <title>|<scope_node>|<scope_type>[|<items>] | "
+              "assessment psychometrics [irt|info|demo] | "
               "study-intel ... | product-intel ... | "
               "publication run-gates|approve|publish|retire|state|queue|reviews|resolve|export | "
               "video render|state|probe | "
@@ -161,7 +165,9 @@ def main() -> None:
               "diagnose [full|verify-backup|restore|repair] | "
               "evaluate run|status|list|show|compare|snapshot|sample | "
               "migrate | doctor | "
-              "launch verify|run|restart|upgrade|rollback|diagnose")
+              "launch verify|run|restart|upgrade|rollback|diagnose | "
+              "drug check|scan <path> | "
+              "fsrs params|optimize|heatmap|sweep ...")
         return
     cmd = sys.argv[1].lower()
     arg = " ".join(sys.argv[2:]).strip()
@@ -561,6 +567,63 @@ def main() -> None:
                 parts[1], scope_type=parts[3].lower(),
                 scope_node_id=node["id"] if node else parts[2], item_count=items,
             ), indent=2))
+        elif action == "psychometrics":
+            # assessment psychometrics irt <theta>|<a>|<b>[|<c>] |
+            # assessment psychometrics info <theta>|<a>|<b>[|<c>] |
+            # assessment psychometrics demo
+            # Deterministic offline demo of the P8 psychometric framework (no DB).
+            sub = parts[1].lower() if len(parts) > 1 else "demo"
+            if sub == "irt":
+                if len(parts) < 5:
+                    raise SystemExit(
+                        "Usage: medforge_core assessment psychometrics irt "
+                        "<theta>|<a>|<b>[|<c>]"
+                    )
+                c = float(parts[5]) if len(parts) > 5 and parts[5] else 0.0
+                print(json.dumps({
+                    "p": irt_3pl_probability(float(parts[2]), float(parts[3]),
+                                             float(parts[4]), c),
+                }, indent=2))
+            elif sub == "info":
+                if len(parts) < 5:
+                    raise SystemExit(
+                        "Usage: medforge_core assessment psychometrics info "
+                        "<theta>|<a>|<b>[|<c>]"
+                    )
+                c = float(parts[5]) if len(parts) > 5 and parts[5] else 0.0
+                print(json.dumps({
+                    "info": item_information(float(parts[2]), float(parts[3]),
+                                             float(parts[4]), c),
+                }, indent=2))
+            else:
+                bank = [
+                    {"item_id": f"demo-{i+1}", "a": a, "b": b, "c": 0.0}
+                    for i, (a, b) in enumerate(
+                        [(1.2, -1.0), (0.8, -0.5), (1.5, 0.0), (1.0, 0.5), (0.9, 1.0)])
+                ]
+                responses = [1, 1, 0, 1, 0]
+                matrix = [[1, 1, 0, 1, 0], [1, 0, 0, 1, 1],
+                          [0, 1, 1, 0, 0], [1, 1, 1, 0, 1]]
+                strata = [
+                    {"ref_correct": 8, "ref_n": 10, "foc_correct": 7, "foc_n": 10},
+                    {"ref_correct": 5, "ref_n": 10, "foc_correct": 5, "foc_n": 10},
+                    {"ref_correct": 2, "ref_n": 10, "foc_correct": 3, "foc_n": 10},
+                ]
+                calibration = {"items": {
+                    f"demo-{i+1}": {"model": "2PL",
+                                    "parameters": {"a": b["a"], "b": b["b"], "c": 0.0},
+                                    "n": 120}
+                    for i, b in enumerate(bank)}}
+                print(json.dumps({
+                    "eap": eap_ability(responses, bank),
+                    "map": map_ability(responses, bank),
+                    "test_info_at_0": test_information(0.0, bank),
+                    "alpha": cronbach_alpha(matrix),
+                    "dif": dif_mantel_haenszel(strata),
+                    "cat": cat_simulate(0.5, bank, max_items=5, seed=7),
+                    "validation": validate_calibration(calibration),
+                    "note": "offline demo on a canned 5-item bank; not a competence claim",
+                }, indent=2))
         elif action == "item-new":
             # item-new <type>|<stem>|<topic>[|<choices a;b;c>][|<correct A>][|<evidence_id>]
             if len(parts) < 4:
@@ -584,7 +647,7 @@ def main() -> None:
             raise SystemExit(
                 "Usage: medforge_core assessment list|blueprints|create|start|status|next|"
                 "previous|answer|flag|submit|result|review|remediate|items|item-info|stats|"
-                "blueprint-new|item-new"
+                "blueprint-new|item-new|psychometrics"
             )
     elif cmd == "study-intel":
         # P9 study intelligence (orchestrator over P2/P3/P4/P6/P7/P8/SR):
@@ -1012,6 +1075,45 @@ def main() -> None:
             raise SystemExit(
                 "Usage: medforge_core evaluate run|status|list|show|compare|snapshot|sample"
             )
+    elif cmd == "anki":
+        # anki check|sync <csv|product> <path> [|deck_name] [|topic]
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if len(parts) < 2:
+            raise SystemExit("Usage: medforge_core anki check|sync <csv|product> <path> [|deck_name] [|topic]")
+        action = parts[0].lower()
+        target = parts[1].lower()
+        path = Path(parts[2]).expanduser().resolve() if len(parts) > 2 else None
+        deck_name = parts[3] if len(parts) > 3 else None
+        topic = parts[4] if len(parts) > 4 else None
+
+        if action == "check":
+            ok = check_ankiconnect()
+            print(json.dumps({"ankiconnect": "ok" if ok else "unavailable"}, indent=2))
+        elif action == "sync":
+            if not path:
+                raise SystemExit("Usage: medforge_core anki sync <csv|product> <path> [|deck_name] [|topic]")
+            if target == "csv":
+                if not path or not path.is_file():
+                    raise SystemExit("CSV file not found")
+                result = sync_deck_from_csv(path, deck_name or f"MedForge::{path.stem}", topic or path.stem)
+                print(json.dumps(result, indent=2, default=str))
+            elif target == "product":
+                if not path or not path.is_dir():
+                    raise SystemExit("Product directory not found")
+                result = sync_deck_from_product(path, deck_name)
+                print(json.dumps(result, indent=2, default=str))
+            else:
+                raise SystemExit("Usage: medforge_core anki sync <csv|product> <path> [|deck_name] [|topic]")
+        elif action == "import":
+            if target == "apkg":
+                if not path or not path.is_file():
+                    raise SystemExit("APKG file not found")
+                result = import_from_genanki(path, deck_name)
+                print(json.dumps(result, indent=2, default=str))
+            else:
+                raise SystemExit("Usage: medforge_core anki import apkg <path> [|deck_name]")
+        else:
+            raise SystemExit("Usage: medforge_core anki check|sync|import ...")
     elif cmd == "study-today":
         # study-today [<topic>] [|budget_minutes] [|run_tutor] [|run_assessment] [|generate_products] [|run_quality_gates] [|export_mode]
         parts = [p.strip() for p in arg.split("|")] if arg else []
@@ -1101,6 +1203,75 @@ def main() -> None:
                 raise RuntimeError("Metadata database check: " + check)
             get_collection().count()
             print("READY: chat, embeddings, SQLite and vector store checked. Model:", model)
+    elif cmd == "status":
+        print(json.dumps(status(), indent=2))
+    elif cmd == "drug":
+        # drug check <meds> [|conditions] | drug scan <path> [|type]
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if len(parts) < 1:
+            raise SystemExit("Usage: medforge_core drug check|scan ...")
+        action = parts[0].lower()
+        if action == "check":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core drug check <med1,med2,...> [|condition1,condition2,...]")
+            meds = [m.strip() for m in parts[1].split(",")]
+            conditions = [c.strip() for c in parts[2].split(",")] if len(parts) > 2 else []
+            result = check_patient_medications(meds, conditions)
+            print(json.dumps(result, indent=2))
+        elif action == "scan":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core drug scan <path> [|type]")
+            path = Path(parts[1]).expanduser().resolve()
+            scan_type = parts[2].lower() if len(parts) > 2 else "auto"
+            if scan_type == "flashcards" or (scan_type == "auto" and path.suffix == ".csv"):
+                result = scan_flashcards_for_interactions(str(path))
+            elif scan_type == "notes" or (scan_type == "auto" and path.is_dir()):
+                result = scan_notes_for_interactions(str(path))
+            else:
+                raise SystemExit("Usage: medforge_core drug scan <path> [|csv|notes]")
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            raise SystemExit("Usage: medforge_core drug check|scan ...")
+    elif cmd == "fsrs":
+        # fsrs params|optimize|heatmap|sweep <deck_id> [|options]
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if len(parts) < 2:
+            raise SystemExit("Usage: medforge_core fsrs params|optimize|heatmap|sweep <deck_id> [|options]")
+        action = parts[0].lower()
+        deck_id = parts[1] if len(parts) > 1 else None
+        if not deck_id:
+            raise SystemExit("Usage: medforge_core fsrs params|optimize|heatmap|sweep <deck_id> [|options]")
+        
+        if action == "params":
+            if len(parts) > 2:
+                # Set params: fsrs params <deck_id> [|weights_json] [|desired_retention] [|learning_steps] [|relearning_steps]
+                weights = json.loads(parts[2]) if len(parts) > 2 and parts[2] else None
+                desired_retention = float(parts[3]) if len(parts) > 3 and parts[3] else 0.9
+                learning_steps = json.loads(parts[4]) if len(parts) > 4 and parts[4] else [1, 10]
+                relearning_steps = json.loads(parts[5]) if len(parts) > 5 and parts[5] else [10]
+                result = set_fsrs_params(deck_id, deck_id, weights, desired_retention, learning_steps, relearning_steps)
+            else:
+                # Get params
+                result = get_fsrs_params(deck_id) or {"deck_id": deck_id, "message": "No custom params set, using defaults"}
+            print(json.dumps(result, indent=2, default=str))
+        elif action == "optimize":
+            if len(parts) > 2:
+                min_reviews = int(parts[2]) if parts[2] else 100
+            else:
+                min_reviews = 100
+            result = optimize_fsrs_params(deck_id, min_reviews)
+            print(json.dumps(result, indent=2, default=str))
+        elif action == "heatmap":
+            days = int(parts[2]) if len(parts) > 2 and parts[2] else 30
+            bucket_hours = int(parts[3]) if len(parts) > 3 and parts[3] else 6
+            result = spaced_repetition_heatmap(deck_id, days)
+            print(json.dumps(result, indent=2, default=str))
+        elif action == "sweep":
+            n_trials = int(parts[2]) if len(parts) > 2 and parts[2] else 50
+            result = fsrs_parameter_sweep(deck_id, n_trials=n_trials)
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            raise SystemExit("Usage: medforge_core fsrs params|optimize|heatmap|sweep <deck_id> [|options]")
     elif cmd == "status":
         print(json.dumps(status(), indent=2))
     else:

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="1"><title>MedForge</title>
+    <pkg-ref id="com.medforge.medforge"/>
+    <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
+    <installation-check script="pm_install_check();"/>
+<script><![CDATA[
+function pm_install_check() {
+    if (system.compareVersions(system.version.ProductVersion, '12.0') < 0) {
+        my.result.title = 'macOS 12.0+ Required';
+        my.result.message = 'MedForge requires macOS 12.0 (Monterey) or later.';
+        my.result.type = 'Fatal';
+        return false;
+    }
+    return true;
+}
+]]></script><choices-outline>
+        <line choice="default">
+            <line choice="com.medforge.medforge"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="com.medforge.medforge" visible="false">
+        <pkg-ref id="com.medforge.medforge"/>
+    </choice>
+    <pkg-ref id="com.medforge.medforge" version="2.1.0" onConclusion="none">com.medforge.medforge.pkg</pkg-ref>
+</installer-gui-script>

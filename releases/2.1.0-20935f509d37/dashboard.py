@@ -8,11 +8,288 @@ mf.mkdirs(); mf.init_db()
 st.set_page_config(page_title="MedForge", page_icon="🧠", layout="wide")
 st.title("MedForge")
 st.caption("Learn a topic. Build a study pack. Keep your sources.")
+
+# Keyboard shortcuts handler
+st.components.v1.html("""
+<script>
+document.addEventListener('keydown', function(e) {
+    // Ignore if typing in input/textarea
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+        return;
+    }
+    
+    // Global shortcuts
+    if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        // Cmd/Ctrl + K - Focus search
+        e.preventDefault();
+        const searchInput = document.querySelector('input[key="global_search"]');
+        if (searchInput) {
+            searchInput.focus();
+            searchInput.select();
+        }
+    }
+    
+    if (e.key === 't' && (e.metaKey || e.ctrlKey)) {
+        // Cmd/Ctrl + T - New study session (start today's study)
+        e.preventDefault();
+        // Trigger a button click or navigate
+        window.location.hash = '#study-today';
+    }
+    
+    if (e.key === 'h' && (e.metaKey || e.ctrlKey)) {
+        // Cmd/Ctrl + H - Home
+        e.preventDefault();
+        window.location.hash = '#home';
+    }
+    
+    if (e.key === 'r' && (e.metaKey || e.ctrlKey)) {
+        // Cmd/Ctrl + R - Review (spaced repetition)
+        e.preventDefault();
+        window.location.hash = '#review';
+    }
+    
+    if (e.key === 's' && (e.metaKey || e.ctrlKey)) {
+        // Cmd/Ctrl + S - Study
+        e.preventDefault();
+        window.location.hash = '#study';
+    }
+    
+    if (e.key === 'a' && (e.metaKey || e.ctrlKey)) {
+        // Cmd/Ctrl + A - Assessments
+        e.preventDefault();
+        window.location.hash = '#assessments';
+    }
+    
+    if (e.key === 't' && (e.metaKey || e.ctrlKey)) {
+        // Cmd/Ctrl + T - Tutor
+        e.preventDefault();
+        window.location.hash = '#tutor';
+    }
+    
+    if (e.key === 'e' && (e.metaKey || e.ctrlKey)) {
+        // Cmd/Ctrl + E - Evidence
+        e.preventDefault();
+        window.location.hash = '#evidence';
+    }
+    
+    if (e.key === '?' && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+        // Cmd/Ctrl + Shift + ? - Show shortcuts help
+        e.preventDefault();
+        alert(`MedForge Keyboard Shortcuts:
+Cmd/Ctrl + K  - Focus search
+Cmd/Ctrl + T  - New study session
+Cmd/Ctrl + H  - Home
+Cmd/Ctrl + R  - Review (SR)
+Cmd/Ctrl + S  - Study
+Cmd/Ctrl + A  - Assessments
+Cmd/Ctrl + T  - Tutor
+Cmd/Ctrl + E  - Evidence
+Cmd/Ctrl + Shift + ? - Show this help`);
+    }
+});
+</script>
+""", height=0)
+
+# Mobile-responsive CSS
+st.markdown("""
+<style>
+/* Mobile-first responsive design */
+@media (max-width: 768px) {
+    /* Stack tabs vertically on mobile */
+    .stTabs [data-baseweb="tab-list"] {
+        flex-wrap: wrap !important;
+        gap: 4px !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        flex: 1 1 calc(50% - 2px) !important;
+        min-width: 120px !important;
+        font-size: 0.85rem !important;
+        padding: 8px 4px !important;
+    }
+    
+    /* Make dataframes scrollable */
+    .stDataFrame {
+        overflow-x: auto !important;
+    }
+    
+    .stDataFrame table {
+        min-width: 600px !important;
+    }
+    
+    /* Make buttons full width on mobile */
+    .stButton > button {
+        width: 100% !important;
+        min-height: 44px !important;
+    }
+    
+    /* Smaller text inputs on mobile */
+    .stTextInput input {
+        font-size: 16px !important; /* Prevents zoom on iOS */
+    }
+    
+    /* Collapsible sidebar on mobile */
+    section[data-testid="stSidebar"] {
+        min-width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Adjust metrics for mobile */
+    .stMetric {
+        padding: 0.5rem !important;
+    }
+    
+    .stMetric label {
+        font-size: 0.85rem !important;
+    }
+    
+    .stMetric [data-testid="stMetricValue"] {
+        font-size: 1.2rem !important;
+    }
+}
+
+/* Tablet styles */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .stTabs [data-baseweb="tab-list"] {
+        flex-wrap: wrap !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        flex: 1 1 calc(33% - 4px) !important;
+        min-width: 140px !important;
+    }
+}
+
+/* Desktop styles */
+@media (min-width: 1025px) {
+    .stTabs [data-baseweb="tab-list"] {
+        flex-wrap: nowrap !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        flex: 0 0 auto !important;
+    }
+}
+
+/* Touch-friendly improvements */
+@media (hover: none) and (pointer: coarse) {
+    .stButton > button {
+        min-height: 48px !important;
+        padding: 12px 24px !important;
+    }
+    
+    .stSelectbox > div > div {
+        min-height: 44px !important;
+    }
+    
+    .stSlider > div > div > div {
+        height: 40px !important;
+    }
+}
+
+/* High DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .stMetric [data-testid="stMetricValue"] {
+        font-weight: 600 !important;
+    }
+}
+
+/* Print styles */
+@media print {
+    .stTabs [data-baseweb="tab-list"] {
+        display: none !important;
+    }
+    
+    .stSidebar {
+        display: none !important;
+    }
+    
+    .stButton, .stDownloadButton {
+        display: none !important;
+    }
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+@media (prefers-contrast: high) {
+    .stButton > button {
+        border: 2px solid currentColor !important;
+    }
+    
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        box-shadow: 0 0 0 3px currentColor !important;
+    }
+}
+
+/* RTL support */
+[dir="rtl"] .stTabs [data-baseweb="tab-list"] {
+    flex-direction: row-reverse !important;
+}
+
+/* Focus visible for keyboard navigation */
+.stButton > button:focus-visible,
+.stTextInput input:focus-visible,
+.stSelectbox > div:focus-visible,
+.stTabs [data-baseweb="tab"]:focus-visible {
+    outline: 3px solid #0066CC !important;
+    outline-offset: 2px !important;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    ::-webkit-scrollbar-track {
+        background: #2d2d2d;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: #555;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: #777;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
 with st.sidebar:
     st.write("**Local AI · version 2.1**")
     st.caption("Your PDFs and generated content stay on this Mac. Online research sends the topic to search providers.")
     mf.set_offline(st.toggle("Offline: use saved evidence", value=mf.OFFLINE))
     st.caption("First-time setup needs internet to download packages and local models.")
+    
+    # Global search
+    st.divider()
+    st.write("**🔍 Global Search**")
+    search_query = st.text_input("Search curriculum, evidence, products, history...", key="global_search")
+    if st.button("Search", key="search_btn") and search_query.strip():
+        st.session_state["search_query"] = search_query.strip()
+        st.rerun()
 
 def show_error(e):
     st.error(str(e))
@@ -47,7 +324,7 @@ def show_pack(out, key):
                 z.write(f, f.name)
     st.download_button("Download complete pack",data.getvalue(),file_name=out.parent.name+"-"+out.name+".zip",mime="application/zip",key=key)
 
-tabs=st.tabs(["HOME","PRODUCT","STUDY","REVIEW","LEARNER","TUTOR","ASSESSMENTS","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","VIDEOS","STUDY PLAN","LIBRARY","HISTORY","SYSTEM","EVALUATION"])
+tabs=st.tabs(["HOME","PRODUCT","STUDY","REVIEW","LEARNER","TUTOR","ASSESSMENTS","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","VIDEOS","STUDY PLAN","LIBRARY","HISTORY","SYSTEM","EVALUATION","SEARCH"])
 with tabs[0]:
     st.subheader("🏠 MedForge Home — Start Today's Study")
     st.caption("One click orchestrates: curriculum → evidence → learner model → tutor → assessment → products → quality gates")
@@ -952,5 +1229,125 @@ with tabs[13]:
         with st.expander("Live-home snapshot (read-only)"):
             st.json({"claims":snap["claims"],"content":snap["content"]})
     except Exception as e: show_error(e)
+
+with tabs[17]:  # SEARCH tab
+    st.subheader("🔍 Global Search")
+    st.caption("Search across curriculum, evidence, products, history, and learner data.")
+    
+    query = st.session_state.get("search_query", "")
+    query = st.text_input("Search query", value=query, key="search_input")
+    
+    col1, col2 = st.columns([1, 4])
+    if col1.button("Search", key="search_submit") and query.strip():
+        st.session_state["search_query"] = query.strip()
+        st.rerun()
+    if col2.button("Clear", key="search_clear"):
+        st.session_state["search_query"] = ""
+        st.rerun()
+    
+    if query.strip():
+        with st.spinner("Searching..."):
+            try:
+                # Search curriculum
+                curriculum_results = mf.curriculum_tree()
+                curriculum_matches = []
+                for subject in curriculum_results.get("subjects", []):
+                    for week in subject.get("weeks", []):
+                        for topic in week.get("topics", []):
+                            if query.lower() in topic.get("title", "").lower():
+                                curriculum_matches.append({
+                                    "type": "curriculum",
+                                    "title": topic["title"],
+                                    "context": f"Subject: {subject.get('subject', '')} > Week: {week.get('week', '')}",
+                                    "topic_id": topic.get("id", "")
+                                })
+                
+                # Search evidence
+                evidence_results = mf.claims_list(limit=50)
+                evidence_matches = []
+                for claim in evidence_results.get("claims", []):
+                    if query.lower() in claim.get("claim_text", "").lower():
+                        evidence_matches.append({
+                            "type": "evidence",
+                            "title": claim["claim_text"][:100] + ("..." if len(claim["claim_text"]) > 100 else ""),
+                            "context": f"Status: {claim.get('verification_status', 'PENDING')} · Type: {claim.get('claim_type', '')}",
+                            "claim_id": claim.get("claim_id", "")
+                        })
+                
+                # Search products
+                product_results = []
+                for pack_path in sorted(mf.PRODUCTS.glob("*/v*/state.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:20]:
+                    try:
+                        state = json.loads(path.read_text())
+                        topic = state.get("topic", "")
+                        if query.lower() in topic.lower():
+                            product_results.append({
+                                "type": "product",
+                                "title": topic,
+                                "context": f"Version: {path.parent.name} · {'Complete' if state.get('complete') else 'In progress'}",
+                                "path": str(path.parent)
+                            })
+                    except Exception:
+                        pass
+                
+                # Search history
+                history_results = []
+                try:
+                    history = mf.get_study_history(limit=50)
+                    for action in history.get("actions", []):
+                        if query.lower() in action.get("topic", "").lower() or query.lower() in action.get("action_type", "").lower():
+                            history_results.append({
+                                "type": "history",
+                                "title": action.get("topic", "Unknown"),
+                                "context": f"Action: {action.get('action_type', '')} · {action.get('occurred_at', '')}",
+                                "action_id": action.get("action_id", "")
+                            })
+                except Exception:
+                    pass
+                
+                # Display results
+                total = len(curriculum_matches) + len(evidence_matches) + len(product_results) + len(history_results)
+                st.success(f"Found {total} matches")
+                
+                if curriculum_matches:
+                    with st.expander(f"📚 Curriculum ({len(curriculum_matches)})"):
+                        for m in curriculum_matches:
+                            st.markdown(f"**{m['title']}**  \n*{m['context']}*")
+                            if st.button("View in Curriculum", key=f"view_curr_{m['topic_id']}"):
+                                st.session_state["search_view"] = f"curriculum:{m['topic_id']}"
+                                st.rerun()
+                
+                if evidence_matches:
+                    with st.expander(f"📖 Evidence/Claims ({len(evidence_matches)})"):
+                        for m in evidence_matches:
+                            st.markdown(f"**{m['title']}**  \n*{m['context']}*")
+                            if st.button("View Claim", key=f"view_ev_{m['claim_id']}"):
+                                st.session_state["search_view"] = f"evidence:{m['claim_id']}"
+                                st.rerun()
+                
+                if product_results:
+                    with st.expander(f"📦 Products ({len(product_results)})"):
+                        for m in product_results:
+                            st.markdown(f"**{m['title']}**  \n*{m['context']}*")
+                            if st.button("View Product", key=f"view_prod_{m['path']}"):
+                                st.session_state["search_view"] = f"product:{m['path']}"
+                                st.rerun()
+                
+                if history_results:
+                    with st.expander(f"📜 History ({len(history_results)})"):
+                        for m in history_results:
+                            st.markdown(f"**{m['title']}**  \n*{m['context']}*")
+                            if st.button("View History", key=f"view_hist_{m['action_id']}"):
+                                st.session_state["search_view"] = f"history:{m['action_id']}"
+                                st.rerun()
+                
+                if total == 0:
+                    st.info("No matches found. Try a different search term.")
+                    
+            except Exception as e:
+                show_error(e)
+    else:
+        st.info("Enter a search term in the sidebar or above to search across all data.")
+    
 st.divider()
 st.caption("Educational drafts. Citation labels are traceability aids; review source passages before sharing medical claims.")

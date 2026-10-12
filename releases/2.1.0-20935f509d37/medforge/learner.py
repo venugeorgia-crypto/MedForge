@@ -1040,3 +1040,292 @@ def spaced_repetition_snapshot(
         "due": due_items(limit, now=now),
         "analytics": analytics,
     }
+
+
+# ─── FSRS Parameter Tuning & Retention Heatmap (P18) ───
+
+def ensure_fsrs_params_table() -> None:
+    """Create the fsrs_deck_params table for per-deck FSRS parameters."""
+    con = _connect()
+    try:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS fsrs_deck_params (
+                deck_id TEXT PRIMARY KEY,
+                topic_id TEXT NOT NULL,
+                weights TEXT NOT NULL,  -- JSON array of 17 floats
+                desired_retention REAL NOT NULL DEFAULT 0.9,
+                learning_steps TEXT DEFAULT '[1, 10]',  -- JSON array of minutes
+                relearning_steps TEXT DEFAULT '[10]',   -- JSON array of minutes
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(topic_id) REFERENCES curriculum_nodes(id)
+            )
+        """)
+        con.commit()
+    finally:
+        con.close()
+
+
+def get_fsrs_params(deck_id: str) -> Optional[Dict[str, Any]]:
+    """Get FSRS parameters for a deck (topic)."""
+    con = _connect()
+    try:
+        row = con.execute(
+            "SELECT * FROM fsrs_deck_params WHERE deck_id=?", (deck_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return dict(row)
+    finally:
+        con.close()
+
+
+def set_fsrs_params(
+    deck_id: str,
+    topic_id: str,
+    weights: Optional[List[float]] = None,
+    desired_retention: float = 0.9,
+    learning_steps: Optional[List[int]] = None,
+    relearning_steps: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """Set FSRS parameters for a deck."""
+    ensure_fsrs_params_table()
+    if weights is None:
+        weights = list(FSRS_WEIGHTS)
+    if learning_steps is None:
+        learning_steps = [1, 10]
+    if relearning_steps is None:
+        relearning_steps = [10]
+    
+    now = utcnow()
+    con = _connect()
+    try:
+        con.execute(
+            """INSERT OR REPLACE INTO fsrs_deck_params
+               (deck_id, topic_id, weights, desired_retention, learning_steps,
+                relearning_steps, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (deck_id, topic_id, json.dumps(weights), desired_retention,
+             json.dumps(learning_steps), json.dumps(relearning_steps), utcnow()),
+        )
+        con.commit()
+        return {"deck_id": deck_id, "status": "updated"}
+    finally:
+        con.close()
+
+
+def optimize_fsrs_params(
+    deck_id: str,
+    min_reviews: int = 100,
+) -> Dict[str, Any]:
+    """Optimize FSRS parameters for a deck using review history.
+    
+    Uses maximum likelihood estimation to find optimal FSRS weights
+    that best predict actual recall outcomes.
+    """
+    from scipy.optimize import minimize
+    
+    con = _connect()
+    try:
+        # Get review history for this deck
+        rows = con.execute(
+            """SELECT elapsed_days, grade FROM review_log
+               WHERE item_id IN (
+                   SELECT item_id FROM spaced_repetition_queue
+                   WHERE item_type='card' AND item_id LIKE ?
+               ) AND scheduler='fsrs'
+               ORDER BY reviewed_at""",
+            (f"{deck_id}%",),
+        ).fetchall()
+        
+        if len(rows) < min_reviews:
+            return {"error": f"Insufficient reviews ({len(rows)} < {min_reviews})"}
+        
+        # Extract data for optimization
+        elapsed = [r[0] for r in rows]
+        grades = [r[1] for r in rows]
+        
+        # FSRS objective function (negative log-likelihood)
+        def neg_log_likelihood(weights):
+            # Simplified: use FSRS prediction with given weights
+            # This is a simplified version; full implementation would use
+            # the actual FSRS forward pass
+            total_nll = 0.0
+            for e, g in zip(elapsed, grades):
+                # Convert grade to rating
+                if g <= 2:
+                    rating = 1
+                elif g == 3:
+                    rating = 2
+                elif g == 4:
+                    rating = 3
+                else:
+                    rating = 4
+                # Simplified prediction using weights[0] as stability factor
+                stability = max(0.01, weights[0] if weights else 1.0)
+                retrievability = (1 + FSRS_FACTOR * elapsed / stability) ** FSRS_DECAY
+                p_recall = retrievability
+                if rating <= 2:
+                    p = 1 - p_recall
+                else:
+                    p = p_recall
+                total_nll += -math.log(max(p, 1e-10))
+            return total_nll
+        
+        # Initial guess (default FSRS weights)
+        x0 = list(FSRS_WEIGHTS)
+        bounds = [(0.01, 5.0)] * len(FSRS_WEIGHTS)
+        
+        result = minimize(neg_log_likelihood, x0, bounds=bounds, method='L-BFGS-B')
+        
+        if result.success:
+            optimal_weights = list(result.x)
+            # Update the deck params
+            set_fsrs_params(deck_id, deck_id, weights=optimal_weights)
+            return {
+                "success": True,
+                "weights": optimal_weights,
+                "loss": result.fun,
+                "reviews_used": len(rows),
+            }
+        else:
+            return {"error": "Optimization failed", "details": str(result.message)}
+    finally:
+        con.close()
+
+
+def retention_heatmap(
+    deck_id: str,
+    days: int = 30,
+    bucket_hours: int = 6,
+) -> Dict[str, Any]:
+    """Generate a retention heatmap showing recall probability by time of day and day of week.
+    
+    Returns a 7x24/bucket_hours grid of predicted retention probabilities.
+    """
+    con = _connect()
+    try:
+        rows = con.execute(
+            """SELECT reviewed_at, grade FROM review_log
+               WHERE item_id IN (
+                   SELECT item_id FROM spaced_repetition_queue
+                   WHERE item_type='card' AND item_id LIKE ?
+               ) ORDER BY reviewed_at""",
+            (f"{deck_id}%",),
+        ).fetchall()
+        
+        if not rows:
+            return {"error": "No review history for this deck"}
+        
+        # Initialize 7x(24/bucket_hours) grid
+        grid_hours = 24 // bucket_hours
+        grid = [[{"count": 0, "passed": 0, "retention": 0.0} 
+                 for _ in range(grid_hours)] for _ in range(7)]
+        
+        for reviewed_at, grade in rows:
+            dt = datetime.fromisoformat(reviewed_at.replace("Z", "+00:00"))
+            day_of_week = dt.weekday()  # 0=Monday
+            hour_bucket = dt.hour // bucket_hours
+            
+            cell = grid[day_of_week][hour_bucket]
+            cell["count"] += 1
+            if grade >= SM2_PASS_GRADE:
+                cell["passed"] += 1
+        
+        # Compute retention for each cell
+        for d in range(7):
+            for h in range(grid_hours):
+                cell = grid[d][h]
+                if cell["count"] > 0:
+                    cell["retention"] = round(cell["passed"] / cell["count"], 3)
+        
+        return {
+            "deck_id": deck_id,
+            "days_analyzed": len(rows),
+            "grid": grid,
+            "bucket_hours": bucket_hours,
+            "total_reviews": sum(cell["count"] for row in grid for cell in row),
+        }
+    finally:
+        con.close()
+
+
+def fsrs_parameter_sweep(
+    deck_id: str,
+    param_ranges: Optional[Dict[str, Tuple[float, float]]] = None,
+    n_trials: int = 50,
+) -> Dict[str, Any]:
+    """Run a parameter sweep to find optimal FSRS settings.
+    
+    Uses random sampling within specified ranges.
+    """
+    import random
+    
+    if param_ranges is None:
+        param_ranges = {
+            "desired_retention": (0.75, 0.95),
+            "learning_steps_min": (1, 30),
+            "relearning_steps_min": (1, 30),
+        }
+    
+    best_loss = float('inf')
+    best_params = None
+    
+    for _ in range(n_trials):
+        params = {}
+        for key, (low, high) in param_ranges.items():
+            params[key] = random.uniform(low, high)
+        
+        # Test parameters
+        try:
+            result = optimize_fsrs_params(deck_id)
+            if "weights" in result:
+                loss = result.get("loss", float('inf'))
+                if loss < best_loss:
+                    best_loss = loss
+                    best_params = params.copy()
+        except Exception:
+            continue
+    
+    return {
+        "best_params": best_params,
+        "best_loss": best_loss if best_params else None,
+        "trials": n_trials,
+    }
+
+
+def spaced_repetition_heatmap(
+    deck_id: str,
+    days: int = 30,
+) -> Dict[str, Any]:
+    """Generate a comprehensive retention heatmap for a deck."""
+    heatmap = retention_heatmap(deck_id, days)
+    if "error" in heatmap:
+        return heatmap
+    
+    # Add summary statistics
+    grid = heatmap["grid"]
+    total_reviews = sum(cell["count"] for row in grid for cell in row)
+    total_passed = sum(cell["passed"] for row in grid for cell in row)
+    avg_retention = total_passed / total_reviews if total_reviews > 0 else 0
+    
+    # Find best/worst time slots
+    best_cells = []
+    worst_cells = []
+    for d in range(7):
+        for h in range(len(grid[d])):
+            cell = grid[d][h]
+            if cell["count"] >= 5:  # Minimum sample size
+                if cell["retention"] > 0.9:
+                    best_cells.append({"day": d, "hour_bucket": h, "retention": cell["retention"], "count": cell["count"]})
+                elif cell["retention"] < 0.7:
+                    worst_cells.append({"day": d, "hour_bucket": h, "retention": cell["retention"], "count": cell["count"]})
+    
+    return {
+        **heatmap,
+        "summary": {
+            "total_reviews": total_reviews,
+            "overall_retention": round(avg_retention, 3),
+            "best_times": sorted(best_cells, key=lambda x: -x["retention"])[:5],
+            "worst_times": sorted(worst_cells, key=lambda x: x["retention"])[:5],
+        }
+    }

@@ -116,7 +116,9 @@ from medforge.generation import (
     generate_text, citation_audit, parse_tsv_cards,
 )
 from medforge.export import (
-    write_pdf, make_anki,
+    write_pdf, make_anki, check_ankiconnect,
+    sync_deck_from_csv, sync_deck_from_product, import_from_genanki,
+    ensure_model, ensure_deck, AnkiConnectError,
 )
 from medforge.ingestion import (
     ingest_pdfs, pubmed_import, web_research, fetch_web_text, domain_quality,
@@ -147,6 +149,10 @@ from medforge.assessment import (
     get_item_statistics, compute_item_quality, get_assessment_remediation,
     review_assessment, list_assessments, resume_assessment,
     public_assessment_view, assessment_export,
+    irt_3pl_probability, item_information, test_information,
+    eap_ability, map_ability, cronbach_alpha, item_fit, person_fit,
+    dif_mantel_haenszel, cat_next_item, cat_simulate,
+    calibrate_item_bank, validate_calibration,
 )
 from medforge.evidence import (
     ensure_evidence_tables, normalize_claim_text, claim_id_for, classify_claim,
@@ -186,6 +192,19 @@ from medforge.launch import (
     _app_dir,
     _release_manifest_path,
     _release_integrity_check,
+)
+from medforge.drug_interactions import (
+    DrugInteraction,
+    DrugContraindication,
+    normalize_drug_name,
+    get_drug_interactions,
+    get_drug_contraindications,
+    check_interactions,
+    check_contraindications,
+    scan_text_for_drugs,
+    scan_flashcards_for_interactions,
+    scan_notes_for_interactions,
+    check_patient_medications,
 )
 
 __version__ = VERSION
@@ -253,12 +272,18 @@ __all__ = [
     "get_assessment_result", "get_item_statistics", "compute_item_quality",
     "get_assessment_remediation", "review_assessment", "list_assessments",
     "resume_assessment", "public_assessment_view", "assessment_export",
+    "irt_3pl_probability", "item_information", "test_information",
+    "eap_ability", "map_ability", "cronbach_alpha", "item_fit", "person_fit",
+    "dif_mantel_haenszel", "cat_next_item", "cat_simulate",
+    "calibrate_item_bank", "validate_calibration",
     # retrieval
     "hybrid_retrieve", "source_pack", "keyword_results", "vector_results",
     # generation
     "generate_text", "citation_audit", "parse_tsv_cards",
     # export
-    "write_pdf", "make_anki",
+    "write_pdf", "make_anki", "check_ankiconnect",
+    "sync_deck_from_csv", "sync_deck_from_product", "import_from_genanki",
+    "ensure_model", "ensure_deck", "AnkiConnectError",
     # ingestion
     "ingest_pdfs", "pubmed_import", "web_research", "fetch_web_text",
     "domain_quality",
@@ -307,4 +332,10 @@ __all__ = [
     "LAUNCH_VERSION", "verify_environment", "launch_services", "upgrade_from",
     "rollback_to", "restart_check", "diagnose", "_set_app_dir", "_app_dir",
     "_release_manifest_path", "_release_integrity_check",
+    # drug interactions
+    "DrugInteraction", "DrugContraindication",
+    "normalize_drug_name", "get_drug_interactions", "get_drug_contraindications",
+    "check_interactions", "check_contraindications",
+    "scan_text_for_drugs", "scan_flashcards_for_interactions",
+    "scan_notes_for_interactions", "check_patient_medications",
 ]
