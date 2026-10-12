@@ -172,6 +172,19 @@ from medforge.content import (
     artifact_provenance, content_consistency_report,
     canonical_fallback_from_evidence,
 )
+from medforge.launch import (
+    LAUNCH_VERSION,
+    verify_environment,
+    launch_services,
+    upgrade_from,
+    rollback_to,
+    restart_check,
+    diagnose,
+    _set_app_dir,
+    _app_dir,
+    _release_manifest_path,
+    _release_integrity_check,
+)
 
 __version__ = VERSION
 
@@ -286,4 +299,8 @@ __all__ = [
     "render_study_products", "regenerate_product", "get_product_status",
     "list_artifacts", "artifact_provenance", "content_consistency_report",
     "canonical_fallback_from_evidence", "SUMMARY_ARTIFACT_TYPES",
+    # launch (P17)
+    "LAUNCH_VERSION", "verify_environment", "launch_services", "upgrade_from",
+    "rollback_to", "restart_check", "diagnose", "_set_app_dir", "_app_dir",
+    "_release_manifest_path", "_release_integrity_check",
 ]

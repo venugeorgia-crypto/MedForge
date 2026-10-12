@@ -77,6 +77,8 @@ from medforge import (  # noqa: E402
     artifact_provenance, content_consistency_report,
     CONTENT_VERSION, PROMPT_VERSION,
     mkdirs, sh, slugify, utcnow, atomic_text, job_lock, serialized, chunks, batch,
+    LAUNCH_VERSION, verify_environment, launch_services, upgrade_from,
+    rollback_to, restart_check, diagnose,
 )
 
 import medforge.types as _types  # noqa: E402
@@ -155,7 +157,8 @@ def main() -> None:
               "nightly [run|dry-run|only|runs|status] | schedule install|status|uninstall | "
               "diagnose [full|verify-backup|restore|repair] | "
               "evaluate run|status|list|show|compare|snapshot|sample | "
-              "migrate | doctor")
+              "migrate | doctor | "
+              "launch verify|run|restart|upgrade|rollback|diagnose")
         return
     cmd = sys.argv[1].lower()
     arg = " ".join(sys.argv[2:]).strip()
@@ -1006,6 +1009,37 @@ def main() -> None:
             raise SystemExit(
                 "Usage: medforge_core evaluate run|status|list|show|compare|snapshot|sample"
             )
+    elif cmd == "launch":
+        # launch verify|run|restart|upgrade|rollback|diagnose
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        if parts:
+            head = parts[0].split(None, 1)
+            parts[0] = head[0].lower()
+            if len(head) > 1:
+                parts.insert(1, head[1])
+        action = parts[0] if parts else "verify"
+        if action == "verify":
+            print(json.dumps(verify_environment(require_services=False), indent=2))
+        elif action == "run":
+            print(json.dumps(launch_services(), indent=2))
+        elif action == "restart":
+            print(json.dumps(restart_check(), indent=2))
+        elif action == "upgrade":
+            if len(parts) < 3:
+                raise SystemExit("Usage: medforge_core launch upgrade <source_release> <target_release> [|run_migration]")
+            source = Path(parts[1]).expanduser().resolve()
+            target = Path(parts[2]).expanduser().resolve()
+            run_migration = parts[3].lower() == "true" if len(parts) > 3 else False
+            print(json.dumps(upgrade_from(source, target, run_migration), indent=2, default=str))
+        elif action == "rollback":
+            if len(parts) < 2:
+                raise SystemExit("Usage: medforge_core launch rollback <target_release>")
+            target = Path(parts[1]).expanduser().resolve()
+            print(json.dumps(rollback_to(target), indent=2, default=str))
+        elif action == "diagnose":
+            print(json.dumps(diagnose(verbose=True), indent=2, default=str))
+        else:
+            raise SystemExit("Usage: medforge_core launch verify|run|restart|upgrade|rollback|diagnose")
     elif cmd == "migrate":
         with job_lock():
             print(json.dumps(migrate_database(), indent=2))
