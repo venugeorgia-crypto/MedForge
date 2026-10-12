@@ -47,21 +47,169 @@ def show_pack(out, key):
                 z.write(f, f.name)
     st.download_button("Download complete pack",data.getvalue(),file_name=out.parent.name+"-"+out.name+".zip",mime="application/zip",key=key)
 
-tabs=st.tabs(["PRODUCT","STUDY","REVIEW","LEARNER","TUTOR","ASSESSMENTS","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","LIBRARY","HISTORY","STATUS","EVALUATION"])
+tabs=st.tabs(["HOME","PRODUCT","STUDY","REVIEW","LEARNER","TUTOR","ASSESSMENTS","ASK","CURRICULUM","TEXTBOOKS","EVIDENCE","VIDEOS","STUDY PLAN","LIBRARY","HISTORY","SYSTEM","EVALUATION"])
 with tabs[0]:
-    topic=st.text_input("What do you want to learn?",placeholder="cardiac cycle",max_chars=250)
-    st.caption("PDFs + PubMed + authoritative web pages → study guide, workbook, cards, quiz and scripts.")
-    if st.button("Create product",type="primary",width="stretch"):
-        if not topic.strip(): st.warning("Enter one topic.")
+    st.subheader("🏠 MedForge Home — Start Today's Study")
+    st.caption("One click orchestrates: curriculum → evidence → learner model → tutor → assessment → products → quality gates")
+    
+    # Get today's plan for overview
+    plan = None
+    try: plan = mf.get_today_plan()
+    except Exception as e: show_error(e)
+    
+    # Quick metrics row
+    if plan:
+        p1,p2,p3,p4 = st.columns(4)
+        p1.metric("Budget", f"{plan['planned_minutes']}/{plan['budget_minutes']} min")
+        p2.metric("Due Cards (SR)", plan["spaced_repetition"].get("due_now", 0))
+        p3.metric("Overdue", plan["spaced_repetition"].get("overdue", 0))
+        p4.metric("Actions", len(plan.get("actions", [])))
+    
+    # Recommendation
+    rec = None
+    try: rec = mf.recommend_next_action()
+    except Exception as e: show_error(e)
+    
+    if rec and rec.get("recommendation"):
+        r = rec["recommendation"]
+        st.markdown(f"### 🎯 Recommended: **{r['topic']}** → *{r['action']}* (priority: {r['priority']:.3f})")
+        st.caption(rec["reason"])
+        
+        # Mastery/confidence quick view
+        try:
+            mastery = mf.get_mastery(r['topic'])
+            if mastery:
+                c1,c2,c3,c4 = st.columns(4)
+                c1.metric("Mastery", f"{mastery.get('mastery_percent', 'N/A')}%")
+                c2.metric("Evidence", mastery.get('evidence_count', 0))
+                c3.metric("Uncertainty", f"{mastery.get('uncertainty', 'N/A'):.2f}" if mastery.get('uncertainty') is not None else "—")
+                c4.metric("Consistency", f"{mastery.get('consistency', 'N/A'):.2f}" if mastery.get('consistency') is not None else "—")
+        except Exception:
+            pass
+        
+        # Weaknesses for this topic
+        try:
+            weaknesses = mf.get_weaknesses()
+            topic_weak = [w for w in weaknesses if w.get('topic_id') in (r['topic'], r['topic'].lower().replace(' ', '-'))]
+            if topic_weak:
+                st.markdown("**⚠ Unresolved weaknesses:**")
+                for w in topic_weak[:3]:
+                    st.warning(f"{w.get('concept')}: {w.get('misconception')} ({w.get('severity')})")
+        except Exception:
+            pass
+        
+        # THE BIG BUTTON
+        st.divider()
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🚀 START TODAY'S STUDY", type="primary", use_container_width=True):
+                with st.spinner("Running complete study workflow (tutor + assessment + products + quality gates)..."):
+                    try:
+                        result = mf.start_todays_study(
+                            topic=r['topic'],
+                            goal="exam",
+                            budget_minutes=plan.get('budget_minutes', 60),
+                            run_tutor=True,
+                            run_assessment=True,
+                            generate_products=True,
+                            run_quality_gates=True,
+                            export_mode="private",
+                        )
+                        st.session_state["todays_study_result"] = result
+                        st.rerun()
+                    except Exception as e:
+                        show_error(e)
+    
+    # Show results if available
+    if st.session_state.get("todays_study_result"):
+        result = st.session_state["todays_study_result"]
+        st.divider()
+        st.success("✅ Today's study complete!")
+        
+        # Summary
+        if result.get("why"):
+            st.markdown(f"**Why:** {result['why']}")
+        
+        # Learner analysis
+        la = result.get("learner_analysis", {})
+        if la.get("mastery"):
+            m = la["mastery"]
+            c1,c2,c3 = st.columns(3)
+            c1.metric("Mastery", f"{m.get('mastery_percent', 'N/A')}%")
+            c2.metric("Evidence", m.get('evidence_count', 0))
+            c3.metric("Uncertainty", f"{m.get('uncertainty', 'N/A'):.2f}" if m.get('uncertainty') is not None else "—")
+        
+        # Tutor/Assessment
+        if result.get("tutor_session"):
+            ts = result["tutor_session"]
+            st.info(f"📚 Tutor session: {ts.get('tutor_session_id')} (mode: {ts.get('mode')})")
+        if result.get("assessment", {}).get("assessment_id"):
+            st.info(f"📝 Assessment: {result['assessment']['assessment_id']}")
+        
+        # Products
+        prod = result.get("products", {})
+        if prod.get("content_id"):
+            st.success(f"📦 Canonical content: {prod['content_id']}")
+            if prod.get("legacy_pack_path"):
+                st.code(prod['legacy_pack_path'])
+                st.caption("Legacy pack generated (PDFs, Anki, etc.)")
+        
+        # Quality gates
+        qg = result.get("quality_gates", {})
+        if qg.get("gates"):
+            gates = qg["gates"]
+            status = gates.get('overall', 'unknown')
+            if status == "APPROVED":
+                st.success(f"✅ Quality gates: {status}")
+            elif status == "BLOCKED":
+                st.error(f"🚫 Quality gates: {status}")
+            else:
+                st.warning(f"⏳ Quality gates: {status}")
+        
+        # Next action
+        next_rec = result.get("next_action", {})
+        if next_rec.get("recommendation"):
+            nr = next_rec["recommendation"]
+            st.markdown(f"**Next up:** {nr['topic']} → {nr['action']} ({nr['priority']:.3f})")
+        
+        # Traceability
+        if st.expander("🔍 Full traceability"):
+            st.json(result.get("traceability", {}))
+    
+    # Fallback: manual topic entry
+    st.divider()
+    st.markdown("**Or enter a specific topic:**")
+    manual_topic = st.text_input("Topic", placeholder="e.g. Growth Hormone Physiology", key="home_manual_topic")
+    if st.button("Start Study for Topic", type="secondary") and manual_topic.strip():
+        with st.spinner("Running complete study workflow..."):
+            try:
+                result = mf.start_todays_study(
+                    topic=manual_topic.strip(),
+                    goal="exam",
+                    budget_minutes=60,
+                    run_tutor=True,
+                    run_assessment=True,
+                    generate_products=True,
+                    run_quality_gates=True,
+                    export_mode="private",
+                )
+                st.session_state["todays_study_result"] = result
+                st.rerun()
+            except Exception as e:
+                show_error(e)
+    
+    # Knowledge gaps overview
+    st.divider()
+    try:
+        gaps = mf.get_knowledge_gaps()
+        st.markdown(f"**📊 Knowledge Gaps: {gaps['gap_count']}**")
+        if gaps["gaps"]:
+            st.dataframe(gaps["gaps"], width="stretch", hide_index=True)
         else:
-            with st.status("Researching and generating. A full pack can take several minutes on an M1.",expanded=True) as progress:
-                try:
-                    out=mf.build_product(topic.strip(),include_web=not mf.OFFLINE,open_folder=False)
-                    st.session_state["last_pack"]=str(out)
-                    progress.update(label="Draft pack created",state="complete")
-                except Exception as e:
-                    progress.update(label="Saved at the last completed step",state="error"); show_error(e)
-    if st.session_state.get("last_pack"): show_pack(Path(st.session_state["last_pack"]),"last-pack")
+            st.caption("No gaps detected.")
+    except Exception as e:
+        show_error(e)
+
 with tabs[1]:
     # P9 STUDY HOME: what to study now, why, and one-click missions through the
     # real P7/P8 engines. The legacy self-log is kept at the bottom for compat.
@@ -638,7 +786,102 @@ with tabs[9]:
                         for run in runs[:15]:
                             st.caption(f"{run['created_at']} · {run['result']} · {run['method']} · {run['notes'][:140]}")
     except Exception as e: show_error(e)
-with tabs[10]:
+with tabs[11]:
+    st.caption("Professional medical video production (P11) — storyboard → frames → TTS → FFmpeg → QA → captions.")
+    try:
+        vids = mf.list_content()
+    except Exception as e:
+        vids = []; show_error(e)
+    if vids:
+        c1, c2 = st.columns(2)
+        content_id = c1.selectbox("Content item", [f"{v['topic']} ({v['content_id']})" for v in vids], key="vid_content")
+        aspects = c2.multiselect("Aspects", ["16:9", "9:16", "1:1"], default=["16:9", "9:16", "1:1"], key="vid_aspects")
+        if st.button("Render video", type="primary", key="vid_render"):
+            cid = content_id.split("(")[-1].rstrip(")")
+            with st.spinner("Rendering video (storyboard → frames → TTS → FFmpeg → QA)..."):
+                try:
+                    result = mf.render_video(cid, aspects=tuple(aspects))
+                    st.session_state["last_video"] = result
+                    st.rerun()
+                except Exception as e: show_error(e)
+    if st.session_state.get("last_video"):
+        st.success("Video render complete")
+        st.json(st.session_state["last_video"])
+    else:
+        st.info("No canonical content yet. Generate content via PRODUCT or PRODUCT INTEL first.")
+    
+    with st.expander("Video state / probe"):
+        vid_path = st.text_input("Video path to probe", key="vid_probe_path")
+        if st.button("Probe video") and vid_path.strip():
+            try:
+                st.json(mf.probe_video(Path(vid_path.strip())))
+            except Exception as e: show_error(e)
+
+with tabs[12]:
+    st.caption("Study intelligence: plans, missions, knowledge gaps, readiness, adaptation profiles.")
+    try:
+        status = mf.get_study_status()
+    except Exception as e:
+        status = {}; show_error(e)
+    if status:
+        c1,c2,c3 = st.columns(3)
+        c1.metric("Weak topics", len(status.get("weak_topics", [])))
+        c2.metric("Declining", len(status.get("declining", [])))
+        c3.metric("Due cards", status.get("due_cards_total", 0))
+    
+    # Today's plan
+    plan = None
+    try: plan = mf.get_today_plan()
+    except Exception as e: show_error(e)
+    if plan:
+        st.markdown("**Today's Plan**")
+        for i, a in enumerate(plan.get("actions", []), 1):
+            with st.expander(f"{i}. {a.get('topic')} — {a.get('action')} ({a.get('estimated_minutes')} min)"):
+                st.write(a.get("reason"))
+                if st.button("Start mission", key=f"sp_start_{i}"):
+                    try:
+                        mission = mf.start_study_mission(topic=a.get("topic"))
+                        st.session_state["p9_mission"] = mission["mission_id"]
+                        st.rerun()
+                    except Exception as e: show_error(e)
+    
+    # Missions
+    missions = []
+    try: missions = mf.list_missions()
+    except Exception as e: show_error(e)
+    if missions:
+        st.markdown("**Active Missions**")
+        for m in missions:
+            if m.get("status") == "active":
+                with st.expander(f"{m['topic']} ({m['action_type']})"):
+                    st.write(f"Step {m['current_step']+1}/{len(m['steps'])} · {m['adaptation_profile']}")
+                    if st.button("Continue", key=f"sp_cont_{m['mission_id']}"):
+                        st.session_state["p9_mission"] = m["mission_id"]
+                        st.rerun()
+    
+    # Knowledge gaps
+    try:
+        gaps = mf.get_knowledge_gaps()
+        st.markdown(f"**Knowledge Gaps ({gaps['gap_count']})**")
+        if gaps["gaps"]:
+            st.dataframe(gaps["gaps"], width="stretch", hide_index=True)
+        else:
+            st.caption("No gaps detected.")
+    except Exception as e: show_error(e)
+    
+    # Readiness check
+    rd_topic = st.text_input("Readiness check for topic", key="sp_readiness")
+    if st.button("Check readiness") and rd_topic.strip():
+        try: st.json(mf.get_readiness(rd_topic.strip()))
+        except Exception as e: show_error(e)
+    
+    # Adaptation profile
+    ap_topic = st.text_input("Adaptation profile for topic", key="sp_profile")
+    if st.button("Get profile") and ap_topic.strip():
+        try: st.json(mf.adaptation_profile(ap_topic.strip()))
+        except Exception as e: show_error(e)
+
+with tabs[13]:
     st.caption("Add medical PDFs you are entitled to use. Changed files are indexed on the next product run.")
     uploads=st.file_uploader("Add PDFs",type=["pdf"],accept_multiple_files=True)
     if st.button("Save selected PDFs"):

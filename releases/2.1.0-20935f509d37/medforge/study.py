@@ -1212,3 +1212,609 @@ def get_study_history(limit: int = 50) -> Dict[str, Any]:
     finally:
         con.close()
     return {"actions": actions, "count": len(actions), "study_version": STUDY_VERSION}
+
+
+# ─── Unified "Start Today's Study" Orchestration (P18) ───
+
+
+def start_todays_study(
+    topic: Optional[str] = None,
+    goal: Optional[str] = None,
+    budget_minutes: int = 60,
+    run_tutor: bool = True,
+    run_assessment: bool = True,
+    generate_products: bool = True,
+    run_quality_gates: bool = False,
+    export_mode: str = "private",
+    now: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    P18 unified orchestration: one entry point that runs the complete study workflow.
+    
+    Flow:
+    1. Identify highest-value target (or use provided topic)
+    2. Explain why (recommendation with reasons)
+    3. Prepare evidence (P3 textbook + P4 verification)
+    4. Select teaching strategy (adaptation profile from P6)
+    5. Launch tutor session (P7)
+    6. Launch assessment (P8)
+    7. Record learning (P6 learner model)
+    8. Determine next action (P9 study intelligence)
+    9. Generate canonical content + products (P9 content factory)
+    10. Run quality gates (P10 publication)
+    11. Export private/distributable bundles (P10)
+    
+    Returns a comprehensive result with all intermediate states for traceability.
+    """
+    ensure_study_tables()
+    now = now or _now()
+    
+    from medforge import learner_model as LM
+    from medforge.curriculum import curriculum_progress, topic_path
+    from medforge.content import generate_canonical_content, render_study_products, get_product_status
+    from medforge.publication import run_approval_gates, export_bundle
+    
+    result = {
+        "started_at": now,
+        "study_version": STUDY_VERSION,
+        "planner_version": PLANNER_VERSION,
+        "steps": {},
+    }
+    
+    # Step 1: Identify target and get recommendation
+    if topic:
+        target_topic = topic
+        node = _node_for_topic(topic)
+    else:
+        rec = recommend_next_action(goal=goal, now=now)
+        if not rec.get("recommendation"):
+            return {"error": "no actionable topic found", "details": rec}
+        target_topic = rec["recommendation"]["topic"]
+        node = _node_for_topic(target_topic)
+        result["recommendation"] = rec
+        result["why"] = rec["reason"]
+    
+    result["target_topic"] = target_topic
+    result["curriculum_node"] = node
+    
+    # Step 2: Gather evidence (P3 textbook links + P4 verification)
+    evidence_data = {}
+    try:
+        from medforge.textbook import textbook_evidence_for_topic
+        from medforge.evidence import evidence_snapshot
+        evidence_data["textbook"] = textbook_evidence_for_topic(target_topic, preview_chars=0)
+        evidence_data["verification"] = evidence_snapshot()
+        evidence_data["coverage"] = _evidence_coverage(target_topic, node.get("id") if node else None)
+    except Exception as e:
+        evidence_data["error"] = str(e)
+    
+    result["evidence_preparation"] = evidence_data
+    
+    # Step 3: Learner analysis (P6)
+    learner_analysis = {}
+    try:
+        mastery = LM.get_mastery(target_topic)
+        confidence = LM.get_confidence(target_topic)
+        recent_perf = LM.get_recent_performance(target_topic)
+        weaknesses = LM.get_weaknesses(limit=20)
+        topic_weaknesses = [w for w in weaknesses if w.get("topic_id") == target_topic or w.get("topic_id") == slugify(target_topic)]
+        prereq_risks = LM.get_prerequisite_risks(target_topic)
+        priority = LM.study_priority(limit=50, now=now)
+        topic_priority = next((p for p in priority.get("priorities") or priority.get("items") or [] if p.get("topic") == target_topic), None)
+        
+        learner_analysis = {
+            "mastery": mastery,
+            "confidence": confidence,
+            "recent_performance": recent_perf,
+            "weaknesses": topic_weaknesses,
+            "prerequisite_risks": prereq_risks,
+            "priority": topic_priority,
+        }
+    except Exception as e:
+        learner_analysis["error"] = str(e)
+    
+    result["learner_analysis"] = learner_analysis
+    
+    # Step 4: Adaptation profile (P9)
+    try:
+        profile = adaptation_profile(target_topic)
+        result["adaptation_profile"] = profile
+    except Exception as e:
+        result["adaptation_profile"] = {"error": str(e)}
+    
+    # Step 5: Launch tutor session (P7)
+    tutor_result = {}
+    if run_tutor:
+        try:
+            tutor_mode = "explain"  # default
+            if learner_analysis.get("mastery") and learner_analysis["mastery"].get("mastery_score", 0) < 40:
+                tutor_mode = "correct"
+            elif learner_analysis.get("mastery") and learner_analysis["mastery"].get("mastery_score", 0) < 60:
+                tutor_mode = "socratic"
+            elif learner_analysis.get("weaknesses"):
+                tutor_mode = "drill"
+            
+            tutor_session = start_tutor_session(target_topic, mode=tutor_mode, goal="20min")
+            result["tutor_session"] = tutor_session
+            
+            # Also launch engines via study-intel mission
+            mission = start_study_mission(topic=target_topic)
+            mission_engines = launch_mission_engines(mission["mission_id"])
+            result["mission"] = mission
+            result["mission_engines"] = mission_engines
+            
+        except Exception as e:
+            result["tutor_error"] = str(e)
+    
+    # Step 6: Launch assessment (P8)
+    assessment_result = {}
+    if run_assessment:
+        try:
+            # Create ad-hoc assessment for the topic
+            assess = create_assessment(
+                scope_type="topic",
+                scope_node_id=node.get("id") if node else target_topic,
+                mode="PRACTICE",
+                item_count=10,
+                time_limit_minutes=20,
+                title=f"Assessment: {target_topic}",
+            )
+            if assess.get("created"):
+                assessment_id = assess["assessment_id"]
+                start_assessment(assessment_id)
+                assessment_result = {"assessment_id": assessment_id, "created": True}
+            else:
+                assessment_result = {"error": assess.get("error", "assessment creation failed")}
+        except Exception as e:
+            assessment_result = {"error": str(e)}
+    
+    result["assessment"] = assessment_result
+    
+    # Step 7: Record learning events (P6) - done automatically by tutor/assessment
+    
+    # Step 8: Determine next action (already done in step 1)
+    next_rec = recommend_next_action(topic=target_topic, goal=goal, now=now)
+    result["next_action"] = next_rec
+    
+    # Step 9: Generate canonical content + products (P9 content factory)
+    products_result = {}
+    if generate_products:
+        try:
+            content = generate_canonical_content(target_topic)
+            content_id = content["content_id"]
+            products_result["content_id"] = content_id
+            
+            # Render all standard artifacts
+            artifact_types = [
+                "study_guide", "cheat_sheet", "flashcards", 
+                "quiz", "mind_map", "script"
+            ]
+            render_result = render_study_products(content_id, artifact_types=artifact_types)
+            products_result["rendered"] = render_result
+            products_result["status"] = get_product_status(content_id)
+            
+            # Also generate via legacy product pipeline for Anki/PDF exports
+            from medforge.product import build_product
+            pack_path = build_product(target_topic, include_web=not T.OFFLINE, open_folder=False)
+            products_result["legacy_pack_path"] = str(pack_path)
+            
+        except Exception as e:
+            products_result["error"] = str(e)
+    
+    result["products"] = products_result
+    
+    # Step 10: Run quality gates (P10 publication)
+    quality_result = {}
+    if run_quality_gates and products_result.get("content_id"):
+        try:
+            gates = run_approval_gates(products_result["content_id"])
+            quality_result["gates"] = gates
+            
+            # Export bundles
+            if export_mode in ("private", "distributable"):
+                bundle = export_bundle(products_result["content_id"], mode=export_mode)
+                quality_result[f"{export_mode}_bundle"] = bundle
+        except Exception as e:
+            quality_result["error"] = str(e)
+    
+    result["quality_gates"] = quality_result
+    
+    # Step 11: Summary and traceability
+    result["completed_at"] = utcnow()
+    result["traceability"] = {
+        "curriculum_node": node,
+        "content_id": products_result.get("content_id"),
+        "mission_id": result.get("mission", {}).get("mission_id"),
+        "tutor_session_id": result.get("tutor_session", {}).get("tutor_session_id"),
+        "assessment_id": assessment_result.get("assessment_id"),
+        "legacy_pack": products_result.get("legacy_pack_path"),
+    }
+    
+    return result
+
+
+def _todays_study_summary(result: Dict[str, Any]) -> str:
+    """Generate a human-readable summary of the unified study run."""
+    lines = []
+    lines.append(f"=== MedForge Today's Study: {result.get('target_topic', 'unknown')} ===")
+    lines.append(f"Started: {result.get('started_at')}")
+    lines.append(f"Completed: {result.get('completed_at')}")
+    lines.append("")
+    
+    if result.get("why"):
+        lines.append(f"WHY: {result['why']}")
+        lines.append("")
+    
+    la = result.get("learner_analysis", {})
+    if la.get("mastery"):
+        m = la["mastery"]
+        lines.append(f"Mastery: {m.get('mastery_percent', 'N/A')}% (evidence: {m.get('evidence_count', 0)})")
+    if la.get("confidence") and la["confidence"].get("has_confidence_data"):
+        c = la["confidence"]
+        lines.append(f"Confidence: {c.get('confidence_estimate', 'N/A'):.2f} (gap: {c.get('calibration_gap', 'N/A'):+.2f})")
+    
+    wks = la.get("weaknesses", [])
+    if wks:
+        lines.append(f"Weaknesses: {len(wks)} unresolved")
+        for w in wks[:3]:
+            lines.append(f"  - {w.get('concept')}: {w.get('misconception')} ({w.get('severity')})")
+    
+    prof = result.get("adaptation_profile", {})
+    if prof.get("profile"):
+        lines.append(f"Adaptation profile: {prof['profile']}")
+    
+    if result.get("tutor_session"):
+        ts = result["tutor_session"]
+        lines.append(f"Tutor session: {ts.get('tutor_session_id')} ({ts.get('mode')})")
+    
+    if result.get("assessment", {}).get("assessment_id"):
+        lines.append(f"Assessment: {result['assessment']['assessment_id']}")
+    
+    prod = result.get("products", {})
+    if prod.get("content_id"):
+        lines.append(f"Canonical content: {prod['content_id']}")
+        if prod.get("legacy_pack_path"):
+            lines.append(f"Legacy pack: {prod['legacy_pack_path']}")
+    
+    if result.get("quality_gates", {}).get("gates"):
+        gates = result["quality_gates"]["gates"]
+        lines.append(f"Quality gates: {gates.get('overall', 'unknown')}")
+    
+    return "\n".join(lines)
+
+
+# ─── Export unified CLI command ───
+# (The CLI is in medforge_core.py; this just provides the function)
+
+__all__.extend([
+    "start_todays_study",
+    "_todays_study_summary",
+])
+
+
+# ─── Unified History Tracing (P18) ───
+
+
+def get_unified_history(
+    topic: Optional[str] = None,
+    limit: int = 100,
+    now: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    P18 unified history tracing: trace the complete learning lineage.
+    
+    Returns a chronological trace of:
+    study action → tutor session → question → learner answer → assessment 
+    → learner state change → product → evidence
+    
+    All with stable IDs for full traceability.
+    """
+    ensure_study_tables()
+    now = now or _now()
+    
+    from medforge import learner_model as LM
+    from medforge.tutor import list_tutor_sessions, get_tutor_summary
+    from medforge.assessment import list_assessments, get_assessment_result
+    from medforge.content import list_content, list_artifacts, artifact_provenance
+    from medforge.evidence import claims_list, claim_info
+    from medforge.learner import spaced_repetition_snapshot
+    
+    trace = {
+        "generated_at": now,
+        "topic_filter": topic,
+        "study_version": STUDY_VERSION,
+        "timeline": [],
+    }
+    
+    con = _connect()
+    
+    try:
+        # 1. Study actions (study_missions + study_actions)
+        if topic:
+            topic_slug = slugify(topic)
+            actions = con.execute(
+                "SELECT action_id, mission_id, plan_id, topic, mastery_key, action_type,"
+                " status, reason, engine_ref, outcome, occurred_at FROM study_actions"
+                " WHERE topic = ? OR mastery_key = ?"
+                " ORDER BY occurred_at ASC LIMIT ?", (topic, topic_slug, limit)
+            ).fetchall()
+        else:
+            actions = con.execute(
+                "SELECT action_id, mission_id, plan_id, topic, mastery_key, action_type,"
+                " status, reason, engine_ref, outcome, occurred_at FROM study_actions"
+                " ORDER BY occurred_at ASC LIMIT ?", (limit,)
+            ).fetchall()
+        
+        for r in actions:
+            d = dict(r)
+            d["outcome"] = _json_load(d.get("outcome"), {})
+            trace["timeline"].append({
+                "type": "study_action",
+                "timestamp": d["occurred_at"],
+                "action_id": d["action_id"],
+                "topic": d["topic"],
+                "mastery_key": d["mastery_key"],
+                "action_type": d["action_type"],
+                "status": d["status"],
+                "reason": d["reason"],
+                "engine_ref": d["engine_ref"],
+                "outcome": d["outcome"],
+            })
+        
+        # 2. Tutor sessions and turns
+        tutor_sessions = list_tutor_sessions()
+        for ts in tutor_sessions:
+            if topic and ts.get("topic") != topic:
+                continue
+            try:
+                summary = get_tutor_summary(ts["tutor_session_id"])
+                trace["timeline"].append({
+                    "type": "tutor_session",
+                    "timestamp": ts.get("started_at"),
+                    "tutor_session_id": ts["tutor_session_id"],
+                    "topic": ts.get("topic"),
+                    "mode": ts.get("mode"),
+                    "status": ts.get("status"),
+                    "summary": summary,
+                })
+                
+                # Get tutor turns for detailed question/answer trace
+                from medforge.tutor import get_tutor_state
+                state = get_tutor_state(ts["tutor_session_id"])
+                for turn in state.get("turns", []):
+                    trace["timeline"].append({
+                        "type": "tutor_turn",
+                        "timestamp": turn.get("created_at"),
+                        "tutor_session_id": ts["tutor_session_id"],
+                        "turn_number": turn.get("turn_number"),
+                        "kind": turn.get("kind"),
+                        "stage": turn.get("stage"),
+                        "question_id": turn.get("question_id"),
+                        "learner_answer": turn.get("learner_answer"),
+                        "score": turn.get("score"),
+                        "correctness": turn.get("correctness"),
+                        "attempt_id": turn.get("attempt_id"),
+                    })
+            except Exception:
+                pass
+        
+        # 3. Assessments and attempts
+        assessments = list_assessments(limit=50)
+        for a in assessments:
+            if topic and a.get("title", "").lower().find(topic.lower()) == -1:
+                continue
+            try:
+                result = get_assessment_result(a["assessment_id"])
+                trace["timeline"].append({
+                    "type": "assessment",
+                    "timestamp": a.get("started_at"),
+                    "assessment_id": a["assessment_id"],
+                    "title": a.get("title"),
+                    "mode": a.get("mode"),
+                    "status": a.get("status"),
+                    "result": result.get("result", {}),
+                })
+                
+                # Get individual attempts
+                from medforge.assessment import get_assessment_state
+                state = get_assessment_state(a["assessment_id"])
+                for attempt in state.get("attempts", []):
+                    trace["timeline"].append({
+                        "type": "assessment_attempt",
+                        "timestamp": attempt.get("answered_at"),
+                        "assessment_id": a["assessment_id"],
+                        "question_order": attempt.get("question_order"),
+                        "item_id": attempt.get("item_id"),
+                        "item_type": attempt.get("item_type"),
+                        "learner_answer": attempt.get("learner_answer"),
+                        "score": attempt.get("score"),
+                        "correctness": attempt.get("correctness"),
+                        "learning_attempt_id": attempt.get("learning_attempt_id"),
+                    })
+            except Exception:
+                pass
+        
+        # 4. Learner model state changes (learning_attempts)
+        try:
+            if topic:
+                topic_slug = slugify(topic)
+                attempts = con.execute(
+                    "SELECT attempt_id, session_id, curriculum_node_id, mastery_key,"
+                    " item_type, item_id, presented_at, answered_at, score, correct,"
+                    " learner_confidence, response_time_seconds, source, content_version"
+                    " FROM learning_attempts"
+                    " WHERE mastery_key = ? OR curriculum_node_id = (SELECT id FROM curriculum_nodes WHERE title = ?)"
+                    " ORDER BY presented_at ASC LIMIT ?", (topic_slug, topic, limit)
+                ).fetchall()
+            else:
+                attempts = con.execute(
+                    "SELECT attempt_id, session_id, curriculum_node_id, mastery_key,"
+                    " item_type, item_id, presented_at, answered_at, score, correct,"
+                    " learner_confidence, response_time_seconds, source, content_version"
+                    " FROM learning_attempts"
+                    " ORDER BY presented_at ASC LIMIT ?", (limit,)
+                ).fetchall()
+            
+            for a in attempts:
+                d = dict(a)
+                trace["timeline"].append({
+                    "type": "learning_attempt",
+                    "timestamp": d.get("answered_at") or d.get("presented_at"),
+                    "attempt_id": d["attempt_id"],
+                    "mastery_key": d["mastery_key"],
+                    "curriculum_node_id": d["curriculum_node_id"],
+                    "item_type": d["item_type"],
+                    "item_id": d["item_id"],
+                    "score": d["score"],
+                    "correct": d["correct"],
+                    "confidence": d["learner_confidence"],
+                    "response_time": d["response_time_seconds"],
+                    "source": d["source"],
+                    "content_version": d["content_version"],
+                })
+        except Exception:
+            pass
+        
+        # 5. Spaced repetition reviews
+        try:
+            sr = spaced_repetition_snapshot()
+            if topic:
+                due_cards = [c for c in sr.get("due", []) if c.get("topic_id", "").startswith(topic_slug)]
+                reviewed = [c for c in sr.get("review_log", []) if c.get("topic_id", "").startswith(topic_slug)]
+            else:
+                due_cards = sr.get("due", [])
+                reviewed = sr.get("review_log", [])
+            
+            for card in due_cards[:limit]:
+                trace["timeline"].append({
+                    "type": "sr_card_due",
+                    "timestamp": card.get("due_date"),
+                    "item_id": card.get("item_id"),
+                    "topic_id": card.get("topic_id"),
+                    "question": card.get("question"),
+                    "state": card.get("state"),
+                    "repetition_count": card.get("repetition_count"),
+                })
+            
+            for review in reviewed[-limit:]:
+                trace["timeline"].append({
+                    "type": "sr_review",
+                    "timestamp": review.get("reviewed_at"),
+                    "item_id": review.get("item_id"),
+                    "grade": review.get("grade"),
+                    "scheduler": review.get("scheduler"),
+                    "state_before": review.get("state_before"),
+                    "state_after": review.get("state_after"),
+                    "weakness_recorded": review.get("weakness_recorded"),
+                    "weakness_resolved": review.get("weakness_resolved"),
+                })
+        except Exception:
+            pass
+        
+        # 6. Products (canonical content + artifacts)
+        try:
+            contents = list_content()
+            for c in contents:
+                if topic and c.get("topic") != topic:
+                    continue
+                artifacts = list_artifacts(c["content_id"])
+                trace["timeline"].append({
+                    "type": "canonical_content",
+                    "timestamp": c.get("created_at"),
+                    "content_id": c["content_id"],
+                    "topic": c.get("topic"),
+                    "generation_mode": c.get("generation_mode"),
+                    "evidence_refs": c.get("evidence_refs"),
+                    "artifacts": [
+                        {
+                            "artifact_id": art["artifact_id"],
+                            "type": art["artifact_type"],
+                            "version": art["artifact_version"],
+                            "status": art["status"],
+                            "checksum": art["checksum"],
+                            "path": art["path"],
+                        } for art in artifacts
+                    ],
+                })
+        except Exception:
+            pass
+        
+        # 7. Claims and evidence (P4)
+        try:
+            claims = claims_list(limit=limit)
+            for claim in claims.get("claims", []):
+                if topic and claim.get("topic") != topic:
+                    continue
+                info = claim_info(claim["claim_id"])
+                trace["timeline"].append({
+                    "type": "claim",
+                    "timestamp": claim.get("created_at"),
+                    "claim_id": claim["claim_id"],
+                    "topic": claim.get("topic"),
+                    "claim_text": claim["claim_text"],
+                    "claim_type": claim["claim_type"],
+                    "verification_status": claim["verification_status"],
+                    "verification_confidence": claim["verification_confidence"],
+                    "evidence_links": info.get("provenance", []) if info else [],
+                })
+        except Exception:
+            pass
+        
+        # Sort timeline by timestamp
+        def _get_ts(item):
+            ts = item.get("timestamp")
+            return ts or ""
+        
+        trace["timeline"].sort(key=_get_ts)
+        trace["event_count"] = len(trace["timeline"])
+        
+    finally:
+        con.close()
+    
+    return trace
+
+
+def export_unified_history(
+    topic: Optional[str] = None,
+    format: str = "json",
+    output_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """
+    Export the unified history trace to a file.
+    
+    Formats: json, jsonl, csv
+    """
+    trace = get_unified_history(topic=topic)
+    
+    if output_path:
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        if format == "json":
+            atomic_text(output_path, json.dumps(trace, indent=2, default=str))
+        elif format == "jsonl":
+            with open(output_path, "w") as f:
+                for event in trace["timeline"]:
+                    f.write(json.dumps(event, default=str) + "\n")
+        elif format == "csv":
+            import csv
+            if trace["timeline"]:
+                fieldnames = set()
+                for event in trace["timeline"]:
+                    fieldnames.update(event.keys())
+                fieldnames = sorted(fieldnames)
+                with open(output_path, "w", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    for event in trace["timeline"]:
+                        writer.writerow({k: str(v) if v is not None else "" for k, v in event.items()})
+        else:
+            raise ValueError(f"Unknown format: {format}")
+    
+    return trace
+
+
+__all__.extend([
+    "get_unified_history",
+    "export_unified_history",
+])

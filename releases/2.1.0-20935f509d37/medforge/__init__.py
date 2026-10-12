@@ -164,6 +164,8 @@ from medforge.study import (
     start_study_mission, get_mission_state, list_missions,
     complete_mission_action, complete_mission, harvest_mission_results,
     launch_mission_engines, get_study_history, adaptation_profile,
+    start_todays_study, _todays_study_summary,
+    get_unified_history, export_unified_history,
 )
 from medforge.content import (
     CONTENT_VERSION, PROMPT_VERSION, SUMMARY_ARTIFACT_TYPES,
@@ -294,6 +296,8 @@ __all__ = [
     "start_study_mission", "get_mission_state", "list_missions",
     "complete_mission_action", "complete_mission", "harvest_mission_results",
     "launch_mission_engines", "get_study_history", "adaptation_profile",
+    "start_todays_study", "_todays_study_summary",
+    "get_unified_history", "export_unified_history",
     # canonical content + product rendering (V10/P9)
     "generate_canonical_content", "get_content", "list_content",
     "render_study_products", "regenerate_product", "get_product_status",

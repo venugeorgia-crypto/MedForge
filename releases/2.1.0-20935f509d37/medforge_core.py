@@ -71,6 +71,7 @@ from medforge import (  # noqa: E402
     get_today_plan, start_study_mission, get_mission_state, list_missions,
     complete_mission_action, complete_mission, harvest_mission_results,
     launch_mission_engines, get_study_history, adaptation_profile,
+    start_todays_study, _todays_study_summary,
     STUDY_VERSION, PLANNER_VERSION,
     generate_canonical_content, get_content, list_content,
     render_study_products, regenerate_product, get_product_status, list_artifacts,
@@ -147,6 +148,8 @@ def main() -> None:
               "assessment flag <id>[|<order>][|<reason>] | assessment submit <id> | "
               "assessment result <id> | assessment review <id> | "
               "assessment remediate <id> | assessment items [STATUS] | "
+              "study-today [<topic>] [|budget_minutes] [|run_tutor] [|run_assessment] [|generate_products] [|run_quality_gates] [|export_mode] | "
+              "study-history [<topic>] [|format] [|output_path] | "
               "assessment item-info <item_id>[|<version>] | "
               "assessment stats <item_id>[|<version>] | "
               "assessment blueprint-new <title>|<scope_node>|<scope_type>[|<items>] | "
@@ -1009,6 +1012,48 @@ def main() -> None:
             raise SystemExit(
                 "Usage: medforge_core evaluate run|status|list|show|compare|snapshot|sample"
             )
+    elif cmd == "study-today":
+        # study-today [<topic>] [|budget_minutes] [|run_tutor] [|run_assessment] [|generate_products] [|run_quality_gates] [|export_mode]
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        topic = parts[0] if len(parts) > 0 and parts[0] else None
+        budget_minutes = int(parts[1]) if len(parts) > 1 and parts[1] else 60
+        run_tutor = parts[2].lower() != "false" if len(parts) > 2 else True
+        run_assessment = parts[3].lower() != "false" if len(parts) > 3 else True
+        generate_products = parts[4].lower() != "false" if len(parts) > 4 else True
+        run_quality_gates = parts[5].lower() == "true" if len(parts) > 5 else False
+        export_mode = parts[6] if len(parts) > 6 and parts[6] in ("private", "distributable") else "private"
+        goal = parts[7] if len(parts) > 7 else None
+        
+        result = start_todays_study(
+            topic=topic,
+            goal=goal,
+            budget_minutes=budget_minutes,
+            run_tutor=run_tutor,
+            run_assessment=run_assessment,
+            generate_products=generate_products,
+            run_quality_gates=run_quality_gates,
+            export_mode=export_mode,
+        )
+        print(json.dumps(result, indent=2, default=str))
+        
+        # Also print human-readable summary
+        if result.get("target_topic"):
+            print("\n" + "=" * 60)
+            print(_todays_study_summary(result))
+            print("=" * 60)
+    elif cmd == "study-history":
+        # study-history [<topic>] [|format] [|output_path]
+        parts = [p.strip() for p in arg.split("|")] if arg else []
+        topic = parts[0] if len(parts) > 0 and parts[0] else None
+        format = parts[1] if len(parts) > 1 and parts[1] else "json"
+        output_path = Path(parts[2]).expanduser().resolve() if len(parts) > 2 and parts[2] else None
+        
+        trace = export_unified_history(topic=topic, format=format, output_path=output_path)
+        
+        if not output_path:
+            print(json.dumps(trace, indent=2, default=str))
+        else:
+            print(f"Exported {trace['event_count']} events to {output_path} ({format})")
     elif cmd == "launch":
         # launch verify|run|restart|upgrade|rollback|diagnose
         parts = [p.strip() for p in arg.split("|")] if arg else []
